@@ -209,7 +209,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       msg += `🛠️ *Desmontagem e montagem inclusa* (${quote.itensDesmontagem?.length || 0} itens)\n`;
     }
     if (quote.precisaEmbalagem) {
-      msg += `📦 *Embalagem especial inclusa* (${quote.itensEmbalagem?.length || 0} itens)\n`;
+      msg += `📦 *Serviço de embalagem incluso* (${quote.itensEmbalagem?.length || 0} itens)\n`;
     }
     if (quote.precisaCaixas && quote.quantidadeCaixas) {
       msg += `📦 *Caixas de papelão:* ${quote.quantidadeCaixas} unidades inclusas\n`;

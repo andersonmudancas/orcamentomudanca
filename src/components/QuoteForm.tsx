@@ -754,7 +754,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
                 className="w-5 h-5 rounded text-sky-600 focus:ring-sky-500 accent-sky-600"
               />
               <span className="font-bold text-slate-900 text-sm sm:text-base">
-                📦 Preciso de Embalagem Especial de Móveis / Frágeis
+                📦 Preciso de serviço de embalagem
               </span>
             </label>
 
@@ -804,7 +804,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
                 <div className="bg-sky-50 border border-sky-200 rounded-lg p-3 text-xs text-sky-900 leading-relaxed flex items-start gap-2.5">
                   <span className="text-lg">📸</span>
                   <div>
-                    <strong>Fotos pelo WhatsApp:</strong> Você também poderá enviar fotos dos itens delicados na conversa do WhatsApp para orientar nossa equipe.
+                    Favor enviar foto dos moveis a ser embalados na conversa pelo whatsApp
                   </div>
                 </div>
               </div>
@@ -976,7 +976,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
             <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 text-xs text-sky-900 flex items-start gap-2">
               <span>📸</span>
               <span>
-                Após salvar seus móveis, envie fotos deles pelo WhatsApp para podermos avaliar com precisão ferragens e complexidade.
+                Após salvar seus móveis, envie fotos deles pelo WhatsApp para podermos avaliar.
               </span>
             </div>
 
@@ -1038,7 +1038,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
             <div className="bg-sky-50 border border-sky-200 rounded-xl p-3 text-xs text-sky-900 flex items-start gap-2">
               <span>📸</span>
               <span>
-                Você poderá nos enviar fotos dos itens delicados na conversa do WhatsApp.
+                Favor enviar foto dos moveis a ser embalados na conversa pelo whatsApp
               </span>
             </div>
 
