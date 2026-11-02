@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { User } from 'firebase/auth';
 import { Header } from './components/Header';
 import { QuoteForm } from './components/QuoteForm';
 import { AdminDashboard } from './components/AdminDashboard';
 import { Footer } from './components/Footer';
 import { testConnection } from './firebase';
-import { subscribeAuth, logoutAdmin } from './services/authService';
 import { subscribeQuotes } from './services/quotesService';
 import { Quote } from './types/quote';
 
+const ADMIN_STORAGE_KEY = 'anderson_admin_auth_v1';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<'orcamento' | 'admin'>('orcamento');
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    return sessionStorage.getItem(ADMIN_STORAGE_KEY) === 'true';
+  });
   const [newQuotesCount, setNewQuotesCount] = useState(0);
 
   // Initialize and check Firestore connection on boot
@@ -20,16 +21,7 @@ export default function App() {
     testConnection();
   }, []);
 
-  // Listen for user auth
-  useEffect(() => {
-    const unsubscribe = subscribeAuth((user, adminStatus) => {
-      setCurrentUser(user);
-      setIsAdmin(adminStatus);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  // Listen to new quotes count if admin
+  // Listen to new quotes count if admin is authenticated
   useEffect(() => {
     if (!isAdmin) {
       setNewQuotesCount(0);
@@ -42,16 +34,21 @@ export default function App() {
         setNewQuotesCount(count);
       },
       () => {
-        // Silent fail if rules restrict or not loaded yet
+        // Silent fail if network issue
       }
     );
 
     return () => unsubscribe();
   }, [isAdmin]);
 
-  const handleLogout = async () => {
-    await logoutAdmin();
-    setActiveTab('orcamento');
+  const handleLoginSuccess = () => {
+    sessionStorage.setItem(ADMIN_STORAGE_KEY, 'true');
+    setIsAdmin(true);
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem(ADMIN_STORAGE_KEY);
+    setIsAdmin(false);
   };
 
   return (
@@ -60,7 +57,6 @@ export default function App() {
       <Header
         activeTab={activeTab}
         setActiveTab={setActiveTab}
-        currentUser={currentUser}
         isAdmin={isAdmin}
         onLogout={handleLogout}
         newQuotesCount={newQuotesCount}
@@ -71,11 +67,15 @@ export default function App() {
         {activeTab === 'orcamento' ? (
           <QuoteForm
             onSuccessCreated={() => {
-              // Could trigger celebration or prompt
+              // Confirmation feedback handled inside QuoteForm
             }}
           />
         ) : (
-          <AdminDashboard currentUser={currentUser} isAdmin={isAdmin} />
+          <AdminDashboard
+            isAdmin={isAdmin}
+            onLoginSuccess={handleLoginSuccess}
+            onLogout={handleLogout}
+          />
         )}
       </main>
 

@@ -1,11 +1,9 @@
 import React from 'react';
-import { Truck, Phone, ShieldCheck, UserCheck, LogOut, Lock, FileSpreadsheet } from 'lucide-react';
-import { User } from 'firebase/auth';
+import { Truck, Phone, ShieldCheck, LogOut, Lock, FileSpreadsheet } from 'lucide-react';
 
 interface HeaderProps {
   activeTab: 'orcamento' | 'admin';
   setActiveTab: (tab: 'orcamento' | 'admin') => void;
-  currentUser: User | null;
   isAdmin: boolean;
   onLogout: () => void;
   newQuotesCount?: number;
@@ -14,7 +12,6 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   activeTab,
   setActiveTab,
-  currentUser,
   isAdmin,
   onLogout,
   newQuotesCount = 0,
@@ -104,18 +101,20 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* If logged in admin */}
-            {currentUser && (
+            {isAdmin && (
               <div className="flex items-center gap-2 pl-1 border-l border-neutral-800">
-                <span className="text-xs text-neutral-400 hidden lg:inline max-w-[120px] truncate" title={currentUser.email || ''}>
-                  {currentUser.email}
+                <span className="text-xs text-emerald-400 font-semibold hidden sm:inline-flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Conectado
                 </span>
                 <button
                   type="button"
                   onClick={onLogout}
-                  className="p-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-rose-400 rounded-lg text-xs transition-colors"
+                  className="p-1.5 bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-rose-400 rounded-lg text-xs transition-colors flex items-center gap-1"
                   title="Sair do painel"
                 >
                   <LogOut className="w-3.5 h-3.5" />
+                  <span className="text-[11px] sm:hidden">Sair</span>
                 </button>
               </div>
             )}

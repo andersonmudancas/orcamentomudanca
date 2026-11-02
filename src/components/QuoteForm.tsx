@@ -1001,21 +1001,11 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
             className="w-full py-4 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-bold text-base sm:text-lg rounded-xl transition-all shadow-md hover:shadow-lg flex items-center justify-center gap-3 disabled:opacity-60 cursor-pointer"
           >
             <MessageCircle className="w-6 h-6 shrink-0" />
-            {isSubmitting ? 'Salvando e preparando...' : '📲 Enviar pelo WhatsApp & Salvar Orçamento'}
-          </button>
-
-          <button
-            type="button"
-            disabled={isSubmitting}
-            onClick={() => handleSubmit(false)}
-            className="w-full py-3 px-6 bg-slate-100 hover:bg-slate-200 text-slate-800 font-semibold text-sm rounded-xl transition-colors border border-slate-300 flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
-          >
-            <CheckCircle2 className="w-4 h-4 text-sky-600" />
-            Salvar Apenas no Sistema (Sem abrir WhatsApp agora)
+            {isSubmitting ? 'Salvando e preparando...' : '📲 Enviar pelo WhatsApp'}
           </button>
 
           <p className="text-center text-[11px] text-slate-500">
-            🔒 Seus dados serão salvos com segurança em nosso banco de dados e gerenciados diretamente por Anderson Mudanças.
+            🔒 Seus dados serão salvos com segurança em nosso sistema e enviados diretamente para nosso WhatsApp.
           </p>
         </div>
 

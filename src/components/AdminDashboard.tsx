@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
-  User as UserIcon,
   Search,
   Filter,
   CheckCircle2,
-  Clock,
   Truck,
   MessageCircle,
   ExternalLink,
@@ -18,24 +16,21 @@ import {
   Box,
   AlertTriangle,
   RefreshCw,
-  LogIn,
-  DollarSign,
-  FileText,
+  Lock,
+  Eye,
+  EyeOff,
   ChevronRight,
   ShieldCheck,
   Phone,
-  Home,
-  Building,
+  ArrowRight,
 } from 'lucide-react';
-import { User } from 'firebase/auth';
 import { Quote, QuoteStatus } from '../types/quote';
 import { subscribeQuotes, updateQuote, deleteQuote } from '../services/quotesService';
-import { loginWithGoogle, logoutAdmin } from '../services/authService';
-import { ADMIN_EMAIL } from '../firebase';
 
 interface AdminDashboardProps {
-  currentUser: User | null;
   isAdmin: boolean;
+  onLoginSuccess: () => void;
+  onLogout: () => void;
 }
 
 const STATUS_LABELS: Record<QuoteStatus, { label: string; bg: string; text: string; border: string }> = {
@@ -77,7 +72,17 @@ const STATUS_LABELS: Record<QuoteStatus, { label: string; bg: string; text: stri
   },
 };
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isAdmin }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({
+  isAdmin,
+  onLoginSuccess,
+  onLogout,
+}) => {
+  // Password screen state
+  const [passwordInput, setPasswordInput] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordError, setPasswordError] = useState<string | null>(null);
+
+  // Dashboard state
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
@@ -85,8 +90,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<QuoteStatus | 'todos'>('todos');
   const [serviceFilter, setServiceFilter] = useState<'todos' | 'desmontagem' | 'embalagem' | 'caixas'>('todos');
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   // Edit fields for selected quote
   const [editStatus, setEditStatus] = useState<QuoteStatus>('novo');
@@ -123,20 +126,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
     return () => unsubscribe();
   }, [isAdmin, selectedQuote?.id]);
 
-  // Handle Login
-  const handleLogin = async () => {
-    setLoginError(null);
-    setIsLoggingIn(true);
-    try {
-      const user = await loginWithGoogle();
-      if (user.email !== ADMIN_EMAIL) {
-        setLoginError(`O e-mail ${user.email} não possui autorização de administrador. Entre com ${ADMIN_EMAIL}.`);
-      }
-    } catch (err: any) {
-      console.error('Erro ao fazer login:', err);
-      setLoginError('Não foi possível autenticar com o Google. Tente novamente.');
-    } finally {
-      setIsLoggingIn(false);
+  // Handle Password Verification
+  const handlePasswordSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError(null);
+
+    if (passwordInput === 'qqqq11') {
+      setPasswordInput('');
+      onLoginSuccess();
+    } else {
+      setPasswordError('Senha incorreta! Digite a senha correta para conectar.');
     }
   };
 
@@ -225,7 +224,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
 
   // Filtered Quotes
   const filteredQuotes = quotes.filter((q) => {
-    // Search
     const search = searchTerm.toLowerCase();
     const matchSearch =
       !search ||
@@ -235,10 +233,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
       q.destino.toLowerCase().includes(search) ||
       (q.telefone && q.telefone.includes(search));
 
-    // Status
     const matchStatus = statusFilter === 'todos' || q.status === statusFilter;
 
-    // Service
     let matchService = true;
     if (serviceFilter === 'desmontagem') matchService = q.precisaDesmontagem;
     if (serviceFilter === 'embalagem') matchService = q.precisaEmbalagem;
@@ -256,62 +252,80 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
   const countConcluidos = quotes.filter((q) => q.status === 'concluido').length;
   const totalCaixasVendidas = quotes.reduce((acc, q) => acc + (q.quantidadeCaixas || 0), 0);
 
-  // If user is not authenticated as admin, show login gate
+  // If not authenticated, show ONLY Restricted Access with Password "qqqq11"
   if (!isAdmin) {
     return (
       <div className="max-w-md mx-auto px-4 py-16">
-        <div className="bg-white rounded-3xl shadow-lg border border-slate-200 p-8 text-center space-y-6">
-          <div className="w-16 h-16 bg-sky-50 text-sky-600 rounded-2xl flex items-center justify-center mx-auto border border-sky-100 shadow-inner">
-            <Truck className="w-9 h-9" />
+        <div className="bg-white rounded-3xl shadow-xl border border-slate-200 p-7 sm:p-8 text-center space-y-6">
+          <div className="w-16 h-16 bg-slate-900 text-sky-400 rounded-2xl flex items-center justify-center mx-auto shadow-md">
+            <Lock className="w-8 h-8" />
           </div>
 
           <div>
-            <span className="text-xs font-bold text-sky-700 bg-sky-50 px-3 py-1 rounded-full uppercase tracking-wider border border-sky-200">
+            <span className="text-xs font-black text-rose-700 bg-rose-50 px-3 py-1 rounded-full uppercase tracking-wider border border-rose-200">
               Acesso Restrito
             </span>
             <h2 className="text-2xl font-black text-slate-900 mt-3">
               Painel de Gestão
             </h2>
-            <p className="text-xs sm:text-sm text-slate-600 mt-2">
-              Área administrativa para visualização, contato e gerenciamento de todos os orçamentos recebidos através do site.
+            <p className="text-xs sm:text-sm text-slate-600 mt-1.5">
+              Digite a senha de administrador para acessar e gerenciar os pedidos de orçamento.
             </p>
           </div>
 
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-600 text-left space-y-2">
-            <div className="flex items-center gap-2 font-semibold text-slate-800">
-              <ShieldCheck className="w-4 h-4 text-emerald-600" />
-              Segurança e Privacidade do Cliente
+          <form onSubmit={handlePasswordSubmit} className="space-y-4 text-left">
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase mb-1.5">
+                Senha de Acesso:
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={passwordInput}
+                  onChange={(e) => {
+                    setPasswordInput(e.target.value);
+                    setPasswordError(null);
+                  }}
+                  autoFocus
+                  placeholder="Digite a senha de acesso"
+                  className="w-full px-4 py-3 pr-11 rounded-xl border border-slate-300 text-slate-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-slate-50/50"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-3.5 text-slate-400 hover:text-slate-600 cursor-pointer"
+                  title={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
-            <p>
-              Os dados e telefones de clientes só podem ser acessados pelo e-mail do proprietário Anderson (<strong>{ADMIN_EMAIL}</strong>).
-            </p>
-          </div>
 
-          {loginError && (
-            <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 text-left">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>{loginError}</span>
-            </div>
-          )}
+            {passwordError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{passwordError}</span>
+              </div>
+            )}
 
-          <button
-            type="button"
-            disabled={isLoggingIn}
-            onClick={handleLogin}
-            className="w-full py-3.5 px-4 bg-slate-900 hover:bg-black text-white font-bold text-sm rounded-xl transition-all shadow-md flex items-center justify-center gap-3 cursor-pointer disabled:opacity-50"
-          >
-            <LogIn className="w-5 h-5 text-sky-400" />
-            {isLoggingIn ? 'Conectando...' : 'Entrar com Conta Google'}
-          </button>
+            <button
+              type="submit"
+              className="w-full py-3.5 px-4 bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white font-bold text-sm sm:text-base rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>Conectar</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </form>
 
           <p className="text-[11px] text-slate-400">
-            © Anderson Mudanças e Transporte • Sistema Integrado com Firestore
+            © Anderson Mudanças e Transporte • Acesso Administrativo
           </p>
         </div>
       </div>
     );
   }
 
+  // Dashboard Screen (Authenticated with "qqqq11")
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-6">
       
@@ -324,8 +338,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
               Gestão de Orçamentos de Mudança
             </h2>
           </div>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">
-            Conectado como <strong className="text-slate-800">{currentUser?.email}</strong> • Banco de dados em tempo real
+          <p className="text-xs sm:text-sm text-slate-500 mt-1 flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>Conectado como <strong>Administrador</strong> • Banco de dados em tempo real</span>
           </p>
         </div>
 
@@ -333,7 +348,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
           <button
             type="button"
             onClick={() => window.print()}
-            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors border border-slate-200"
+            className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors border border-slate-200 cursor-pointer"
             title="Imprimir relatório da tela"
           >
             <Printer className="w-3.5 h-3.5" />
@@ -342,10 +357,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
 
           <button
             type="button"
-            onClick={logoutAdmin}
-            className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-rose-200"
+            onClick={onLogout}
+            className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors border border-rose-200 cursor-pointer"
           >
-            Sair do Painel
+            Desconectar / Sair
           </button>
         </div>
       </div>
@@ -364,7 +379,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
             {countNovos > 0 && <span className="w-2 h-2 rounded-full bg-sky-500 animate-ping" />}
           </span>
           <div className="text-2xl font-black text-sky-700 mt-1">{countNovos}</div>
-          <span className="text-[10px] text-sky-600">Aguardando contato</span>
+          <span className="text-[10px] text-sky-600">Aguardando retorno</span>
         </div>
 
         <div className="bg-amber-50/60 p-4 rounded-2xl border border-amber-200 shadow-xs">
@@ -410,7 +425,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600"
+                className="absolute right-3 top-2.5 text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
               >
                 Limpar
               </button>
@@ -430,7 +445,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
                 key={s.id}
                 type="button"
                 onClick={() => setServiceFilter(s.id as any)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                   serviceFilter === s.id
                     ? 'bg-slate-900 text-white font-semibold'
                     : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
@@ -459,7 +474,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
               key={st.id}
               type="button"
               onClick={() => setStatusFilter(st.id as any)}
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors cursor-pointer ${
                 statusFilter === st.id
                   ? 'bg-sky-600 text-white font-semibold shadow-xs'
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
@@ -591,7 +606,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
                           e.stopPropagation();
                           handleOpenDetail(q);
                         }}
-                        className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1"
+                        className="px-3 py-1.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-semibold rounded-xl transition-colors flex items-center gap-1 cursor-pointer"
                       >
                         Gerenciar
                         <ChevronRight className="w-3.5 h-3.5" />
@@ -635,7 +650,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
               <button
                 type="button"
                 onClick={() => setSelectedQuote(null)}
-                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm transition-colors shrink-0"
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center font-bold text-sm transition-colors shrink-0 cursor-pointer"
               >
                 ✕
               </button>
@@ -647,7 +662,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
                 <button
                   type="button"
                   onClick={() => handleSendWhatsAppProposal(selectedQuote)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-sm"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
                 >
                   <MessageCircle className="w-4 h-4" />
                   Enviar Proposta pelo WhatsApp
@@ -668,7 +683,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-200"
+                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-200 cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
                 Imprimir Pedido
@@ -785,7 +800,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
                     <span className="font-bold text-slate-800 flex items-center gap-1">
                       📦 Caixas
                     </span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${selectedQuote.precisaCaixas ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'}`}>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${selectedQuote.precisaCaixas ? `${selectedQuote.quantidadeCaixas} un` : 'NÃO'} `}>
                       {selectedQuote.precisaCaixas ? `${selectedQuote.quantidadeCaixas} un` : 'NÃO'}
                     </span>
                   </div>
@@ -809,7 +824,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
             <div className="bg-sky-50/40 p-4 sm:p-5 rounded-2xl border border-sky-200 space-y-4">
               <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-sky-700" />
-                Gerenciamento do Pedido (Apenas Anderson)
+                Gerenciamento do Pedido (Anderson)
               </h4>
 
               {saveSuccessMessage && (
@@ -828,7 +843,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ currentUser, isA
                   <select
                     value={editStatus}
                     onChange={(e) => setEditStatus(e.target.value as QuoteStatus)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
                   >
                     <option value="novo">Novo Pedido</option>
                     <option value="em_analise">Em Análise</option>
