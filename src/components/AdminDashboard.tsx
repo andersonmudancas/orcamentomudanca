@@ -526,7 +526,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </span>
                       <span className="text-xs text-slate-500 flex items-center gap-1 font-medium">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        {q.dataMudanca} {q.turno ? `(${q.turno})` : ''}
+                        {q.dataMudanca}
                       </span>
                     </div>
 
@@ -727,14 +727,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             </div>
 
-            {/* Date & Shift */}
+            {/* Date */}
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs sm:text-sm">
               <span className="text-slate-600 flex items-center gap-1.5">
                 <Calendar className="w-4 h-4 text-sky-600" />
                 Data da Mudança: <strong className="text-slate-900">{selectedQuote.dataMudanca}</strong>
-              </span>
-              <span className="text-slate-600">
-                Turno: <strong className="text-slate-900">{selectedQuote.turno || 'A combinar'}</strong>
               </span>
             </div>
 

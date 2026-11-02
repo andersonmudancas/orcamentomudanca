@@ -24,21 +24,6 @@ import { CardboardBoxSvg } from './CardboardBoxSvg';
 import { createQuote, generateProtocol } from '../services/quotesService';
 import { PropertyType } from '../types/quote';
 
-const COMMON_ITEMS = [
-  'Geladeira',
-  'Fogão',
-  'Máquina de Lavar',
-  'Sofá 3 Lugares',
-  'Cama Box Casal',
-  'Guarda-Roupa 6 Portas',
-  'Mesa com 4 Cadeiras',
-  'TV 55 Polegadas',
-  'Micro-ondas',
-  'Colchão Avulso',
-  'Armário de Cozinha',
-  'Caixas de Roupas/Utensílios',
-];
-
 interface QuoteFormProps {
   onSuccessCreated?: (protocol: string) => void;
 }
@@ -64,7 +49,6 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
 
   // Data e Itens
   const [dataMudanca, setDataMudanca] = useState('');
-  const [turno, setTurno] = useState('Manhã');
   const [itens, setItens] = useState('');
   const [observacoes, setObservacoes] = useState('');
 
@@ -89,18 +73,6 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
   const [generatedWhatsAppUrl, setGeneratedWhatsAppUrl] = useState<string | null>(null);
   const [copiedMessage, setCopiedMessage] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  // Quick append to items
-  const handleAddQuickItem = (itemToAdd: string) => {
-    if (!itens.trim()) {
-      setItens(itemToAdd);
-    } else {
-      const itemsList = itens.split(',').map((i) => i.trim());
-      if (!itemsList.includes(itemToAdd)) {
-        setItens(`${itens.trim()}, ${itemToAdd}`);
-      }
-    }
-  };
 
   // Add Desmontagem Item
   const handleAddDesmontagem = () => {
@@ -152,7 +124,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
     }
     msg += `\n📍 *ORIGEM:*\n${origem.trim()}\nTipo: ${origemInfo}\n`;
     msg += `\n📍 *DESTINO:*\n${destino.trim()}\nTipo: ${destinoInfo}\n`;
-    msg += `\n📅 *Data da Mudança:* ${dataFormatada} (${turno})\n`;
+    msg += `\n📅 *Data da Mudança:* ${dataFormatada}\n`;
     msg += `\n📦 *ITENS DA MUDANÇA:*\n${itens.trim()}\n`;
 
     // Desmontagem
@@ -271,7 +243,6 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
         andarDestino: tipoDestino === 'Apartamento' ? andarDestino : undefined,
         detalhesDestino: destinoInfo,
         dataMudanca,
-        turno,
         itens: itens.trim(),
         precisaDesmontagem: servicoDesmontagem,
         itensDesmontagem: servicoDesmontagem ? itensDesmontagem : [],
@@ -648,47 +619,23 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
           </div>
         </div>
 
-        {/* Section: Data & Período */}
+        {/* Section: Data da Mudança */}
         <div className="space-y-4 pt-2">
           <h3 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2 border-b border-slate-100 pb-2">
             <Calendar className="w-4 h-4 text-sky-600" />
             4. Data Prevista da Mudança
           </h3>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Data *
-              </label>
-              <input
-                type="date"
-                value={dataMudanca}
-                onChange={(e) => setDataMudanca(e.target.value)}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-slate-50/50"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                Período / Turno de Preferência
-              </label>
-              <div className="flex items-center gap-2">
-                {['Manhã', 'Tarde', 'Integral', 'A Combinar'].map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setTurno(t)}
-                    className={`flex-1 py-2.5 px-2 rounded-xl text-xs font-semibold border transition-all ${
-                      turno === t
-                        ? 'bg-sky-600 text-white border-sky-600 shadow-sm'
-                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+              Data *
+            </label>
+            <input
+              type="date"
+              value={dataMudanca}
+              onChange={(e) => setDataMudanca(e.target.value)}
+              className="w-full sm:w-72 px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-slate-50/50"
+            />
           </div>
         </div>
 
@@ -710,26 +657,6 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
               placeholder="Descreva os itens da sua mudança. Ex: 1 geladeira duplex, 1 fogão 4 bocas, 1 cama box casal com colchão, sofá 3 lugares, máquina de lavar 12kg, mesa com 4 cadeiras, cerca de 15 caixas..."
               className="w-full px-3.5 py-3 rounded-xl border border-slate-300 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-slate-50/50"
             />
-          </div>
-
-          {/* Quick add items chips */}
-          <div>
-            <span className="text-xs font-semibold text-slate-500 block mb-2">
-              Toque nos itens comuns para adicionar rapidamente:
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {COMMON_ITEMS.map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => handleAddQuickItem(item)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-sky-100 text-slate-700 hover:text-sky-800 border border-slate-200 rounded-lg text-xs transition-colors"
-                >
-                  <Plus className="w-3 h-3 text-sky-600" />
-                  {item}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
 
