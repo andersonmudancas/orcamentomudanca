@@ -1,0 +1,6 @@
+{
+  "name": "Anderson Mudanças e Transporte",
+  "description": "Sistema de solicitação de orçamento e gerenciamento de mudanças e transportes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

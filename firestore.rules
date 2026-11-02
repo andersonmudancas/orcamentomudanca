@@ -1,0 +1,91 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == "bento.silvinha@gmail.com" && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidQuote(data) {
+      return data.keys().hasAll(['protocol', 'nome', 'origem', 'tipoOrigem', 'destino', 'tipoDestino', 'dataMudanca', 'itens', 'status', 'createdAt']) &&
+        data.protocol is string && data.protocol.size() > 0 && data.protocol.size() <= 64 &&
+        data.nome is string && data.nome.size() > 0 && data.nome.size() <= 150 &&
+        data.origem is string && data.origem.size() > 0 && data.origem.size() <= 300 &&
+        data.tipoOrigem is string && (data.tipoOrigem == 'Casa' || data.tipoOrigem == 'Apartamento') &&
+        data.destino is string && data.destino.size() > 0 && data.destino.size() <= 300 &&
+        data.tipoDestino is string && (data.tipoDestino == 'Casa' || data.tipoDestino == 'Apartamento') &&
+        data.dataMudanca is string && data.dataMudanca.size() <= 20 &&
+        data.itens is string && data.itens.size() > 0 && data.itens.size() <= 3000 &&
+        data.status is string && (data.status in ['novo', 'em_analise', 'orcamento_enviado', 'fechado', 'cancelado', 'concluido']) &&
+        (!('telefone' in data) || (data.telefone is string && data.telefone.size() <= 50)) &&
+        (!('detalhesOrigem' in data) || (data.detalhesOrigem is string && data.detalhesOrigem.size() <= 200)) &&
+        (!('detalhesDestino' in data) || (data.detalhesDestino is string && data.detalhesDestino.size() <= 200)) &&
+        (!('turno' in data) || (data.turno is string && data.turno.size() <= 50)) &&
+        (!('precisaDesmontagem' in data) || data.precisaDesmontagem is bool) &&
+        (!('itensDesmontagem' in data) || (data.itensDesmontagem is list && data.itensDesmontagem.size() <= 100)) &&
+        (!('precisaEmbalagem' in data) || data.precisaEmbalagem is bool) &&
+        (!('itensEmbalagem' in data) || (data.itensEmbalagem is list && data.itensEmbalagem.size() <= 100)) &&
+        (!('precisaCaixas' in data) || data.precisaCaixas is bool) &&
+        (!('quantidadeCaixas' in data) || (data.quantidadeCaixas is number && data.quantidadeCaixas >= 0 && data.quantidadeCaixas <= 1000)) &&
+        (!('valorTotalCaixas' in data) || (data.valorTotalCaixas is number && data.valorTotalCaixas >= 0)) &&
+        (!('observacoes' in data) || (data.observacoes is string && data.observacoes.size() <= 1000)) &&
+        (!('valorOrcamento' in data) || (data.valorOrcamento is number && data.valorOrcamento >= 0)) &&
+        (!('notasInternas' in data) || (data.notasInternas is string && data.notasInternas.size() <= 2000));
+    }
+
+    match /quotes/{quoteId} {
+      // PII Protection: Only the admin can list or read quote requests
+      allow get, list: if isAdmin();
+
+      // Anyone (client) can submit a quote request
+      allow create: if isValidId(quoteId) &&
+        isValidQuote(incoming()) &&
+        incoming().status == 'novo' &&
+        incoming().createdAt == request.time;
+
+      // Only admin can update quotes (e.g. status, internal notes, quoted price)
+      allow update: if isValidId(quoteId) &&
+        isAdmin() &&
+        isValidQuote(incoming()) &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time;
+
+      // Only admin can delete quotes
+      allow delete: if isValidId(quoteId) && isAdmin();
+    }
+
+    match /admins/{uid} {
+      allow get: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+      allow create, update: if isSignedIn() &&
+        request.auth.uid == uid &&
+        request.auth.token.email == "bento.silvinha@gmail.com" &&
+        request.auth.token.email_verified == true;
+      allow delete: if false;
+    }
+  }
+}

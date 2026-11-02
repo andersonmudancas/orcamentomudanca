@@ -1,0 +1,185 @@
+{
+  "entities": {
+    "Quote": {
+      "title": "Quote",
+      "description": "Moving and transport quote request submitted by customers",
+      "type": "object",
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "description": "Unique quote protocol number (e.g. AND-1234)",
+          "maxLength": 64
+        },
+        "nome": {
+          "type": "string",
+          "description": "Customer full name",
+          "maxLength": 150
+        },
+        "telefone": {
+          "type": "string",
+          "description": "Customer contact phone or WhatsApp",
+          "maxLength": 50
+        },
+        "origem": {
+          "type": "string",
+          "description": "Origin address or condominium",
+          "maxLength": 300
+        },
+        "tipoOrigem": {
+          "type": "string",
+          "description": "Origin property type (Casa or Apartamento)",
+          "enum": ["Casa", "Apartamento"]
+        },
+        "detalhesOrigem": {
+          "type": "string",
+          "description": "Details about stairs, floors, or elevator at origin",
+          "maxLength": 200
+        },
+        "destino": {
+          "type": "string",
+          "description": "Destination address or condominium",
+          "maxLength": 300
+        },
+        "tipoDestino": {
+          "type": "string",
+          "description": "Destination property type (Casa or Apartamento)",
+          "enum": ["Casa", "Apartamento"]
+        },
+        "detalhesDestino": {
+          "type": "string",
+          "description": "Details about stairs, floors, or elevator at destination",
+          "maxLength": 200
+        },
+        "dataMudanca": {
+          "type": "string",
+          "description": "Date of moving in YYYY-MM-DD format",
+          "maxLength": 20
+        },
+        "turno": {
+          "type": "string",
+          "description": "Preferred shift or period for the move",
+          "maxLength": 50
+        },
+        "itens": {
+          "type": "string",
+          "description": "List or description of items and furniture to be moved",
+          "maxLength": 3000
+        },
+        "precisaDesmontagem": {
+          "type": "boolean",
+          "description": "Whether furniture disassembly and assembly is requested"
+        },
+        "itensDesmontagem": {
+          "type": "array",
+          "description": "Specific furniture items needing disassembly",
+          "items": {
+            "type": "string",
+            "maxLength": 150
+          }
+        },
+        "precisaEmbalagem": {
+          "type": "boolean",
+          "description": "Whether packing service is requested"
+        },
+        "itensEmbalagem": {
+          "type": "array",
+          "description": "Specific items needing specialized packing",
+          "items": {
+            "type": "string",
+            "maxLength": 150
+          }
+        },
+        "precisaCaixas": {
+          "type": "boolean",
+          "description": "Whether customer wants to purchase cardboard boxes"
+        },
+        "quantidadeCaixas": {
+          "type": "number",
+          "description": "Quantity of cardboard boxes requested"
+        },
+        "valorTotalCaixas": {
+          "type": "number",
+          "description": "Total value of cardboard boxes in BRL"
+        },
+        "observacoes": {
+          "type": "string",
+          "description": "Additional notes from the client",
+          "maxLength": 1000
+        },
+        "status": {
+          "type": "string",
+          "description": "Processing status of the quote request",
+          "enum": ["novo", "em_analise", "orcamento_enviado", "fechado", "cancelado", "concluido"]
+        },
+        "valorOrcamento": {
+          "type": "number",
+          "description": "Quoted price provided by the admin in BRL"
+        },
+        "notasInternas": {
+          "type": "string",
+          "description": "Private admin notes and logistics details",
+          "maxLength": 2000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last update timestamp"
+        }
+      },
+      "required": [
+        "protocol",
+        "nome",
+        "origem",
+        "tipoOrigem",
+        "destino",
+        "tipoDestino",
+        "dataMudanca",
+        "itens",
+        "status",
+        "createdAt"
+      ]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Administrator account authorized to view and manage all quotes",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "description": "Admin email address",
+          "maxLength": 120
+        },
+        "role": {
+          "type": "string",
+          "description": "Role identifier",
+          "enum": ["admin"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Admin record creation timestamp"
+        }
+      },
+      "required": ["email", "role", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/quotes/{quoteId}": {
+      "schema": {
+        "$ref": "#/entities/Quote"
+      },
+      "description": "Customer moving quote requests"
+    },
+    "/admins/{uid}": {
+      "schema": {
+        "$ref": "#/entities/Admin"
+      },
+      "description": "Authorized administrator profiles"
+    }
+  }
+}
