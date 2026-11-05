@@ -95,7 +95,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editStatus, setEditStatus] = useState<QuoteStatus>('novo');
   const [editValorOrcamento, setEditValorOrcamento] = useState<string>('');
   const [editNotasInternas, setEditNotasInternas] = useState<string>('');
+  const [editDataMudanca, setEditDataMudanca] = useState<string>('');
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [lastScheduledCalendarUrl, setLastScheduledCalendarUrl] = useState<string | null>(null);
 
   // Real-time listener when authenticated as admin
   useEffect(() => {
@@ -145,7 +149,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setEditStatus(quote.status);
     setEditValorOrcamento(quote.valorOrcamento ? String(quote.valorOrcamento) : '');
     setEditNotasInternas(quote.notasInternas || '');
+    setEditDataMudanca(quote.dataMudanca || '');
     setSaveSuccessMessage(null);
+    setModalError(null);
+    setIsConfirmingDelete(false);
+    setLastScheduledCalendarUrl(null);
+  };
+
+  // Google Calendar URL generator
+  const getGoogleCalendarUrl = (
+    quote: Quote,
+    targetDate: string,
+    targetValor?: string,
+    targetNotas?: string
+  ): string => {
+    const title = `🚚 Mudança - ${quote.nome} (Orçamento: ${quote.protocol})`;
+    const dateClean = (targetDate || quote.dataMudanca || '').replace(/-/g, '').trim();
+    const datesParam = dateClean ? `${dateClean}T080000/${dateClean}T180000` : '';
+    const location = `${quote.origem} ➔ ${quote.destino}`;
+
+    let details = `🚚 ANDERSON MUDANÇAS E TRANSPORTE\n`;
+    details += `📄 Orçamento: ${quote.protocol}\n`;
+    details += `👤 Cliente: ${quote.nome}\n`;
+    if (quote.telefone) details += `📱 WhatsApp/Tel: ${quote.telefone}\n`;
+    details += `\n📍 Origem: ${quote.origem} (${quote.tipoOrigem}${quote.detalhesOrigem ? ' - ' + quote.detalhesOrigem : ''})\n`;
+    details += `📍 Destino: ${quote.destino} (${quote.tipoDestino}${quote.detalhesDestino ? ' - ' + quote.detalhesDestino : ''})\n`;
+
+    const valor = targetValor || (quote.valorOrcamento ? `R$ ${quote.valorOrcamento.toFixed(2).replace('.', ',')}` : '');
+    if (valor) {
+      details += `\n💰 Valor Fechado: ${valor.startsWith('R$') ? valor : 'R$ ' + valor}\n`;
+    }
+
+    details += `\n📦 ITENS:\n${quote.itens}\n`;
+
+    if (quote.precisaDesmontagem && quote.itensDesmontagem?.length) {
+      details += `\n🛠️ DESMONTAGEM (${quote.itensDesmontagem.length} itens):\n`;
+      quote.itensDesmontagem.forEach((item, idx) => {
+        details += `${idx + 1}. ${item}\n`;
+      });
+    }
+
+    if (quote.precisaEmbalagem && quote.itensEmbalagem?.length) {
+      details += `\n📦 EMBALAGEM (${quote.itensEmbalagem.length} itens):\n`;
+      quote.itensEmbalagem.forEach((item, idx) => {
+        details += `${idx + 1}. ${item}\n`;
+      });
+    }
+
+    if (quote.precisaCaixas && quote.quantidadeCaixas) {
+      details += `\n📦 CAIXAS: ${quote.quantidadeCaixas} unidades\n`;
+    }
+
+    const notas = targetNotas || quote.notasInternas;
+    if (notas?.trim()) {
+      details += `\n📝 NOTAS DE LOGÍSTICA:\n${notas}\n`;
+    }
+
+    return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(
+      title
+    )}&dates=${datesParam}&details=${encodeURIComponent(details)}&location=${encodeURIComponent(location)}`;
+  };
+
+  const handleOpenGoogleCalendar = (
+    quote: Quote,
+    targetDate: string,
+    targetValor?: string,
+    targetNotas?: string
+  ) => {
+    const url = getGoogleCalendarUrl(quote, targetDate, targetValor, targetNotas);
+    try {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      console.warn('Popup blocked or failed to open window:', e);
+    }
   };
 
   // Save changes to quote
@@ -153,6 +229,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     if (!selectedQuote?.id) return;
     setIsSaving(true);
     setSaveSuccessMessage(null);
+    setModalError(null);
+
+    const oldStatus = selectedQuote.status;
+    const isNowFechado = editStatus === 'fechado';
+    const statusJustChangedToFechado = isNowFechado && oldStatus !== 'fechado';
+    const newDate = editDataMudanca.trim() || selectedQuote.dataMudanca;
 
     try {
       const numValor = parseFloat(editValorOrcamento.replace(',', '.'));
@@ -160,12 +242,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         status: editStatus,
         valorOrcamento: isNaN(numValor) ? undefined : numValor,
         notasInternas: editNotasInternas.trim(),
+        dataMudanca: newDate,
       });
+
       setSaveSuccessMessage('Alterações salvas com sucesso!');
-      setTimeout(() => setSaveSuccessMessage(null), 3000);
+
+      // Se o status for ou se tornou Fechado / Agendado, atualiza o link direto do Google Agenda
+      if (isNowFechado) {
+        const calUrl = getGoogleCalendarUrl(selectedQuote, newDate, editValorOrcamento, editNotasInternas);
+        setLastScheduledCalendarUrl(calUrl);
+        if (statusJustChangedToFechado) {
+          handleOpenGoogleCalendar(selectedQuote, newDate, editValorOrcamento, editNotasInternas);
+        }
+      }
+
+      setTimeout(() => setSaveSuccessMessage(null), 5000);
     } catch (error) {
       console.error('Erro ao atualizar pedido:', error);
-      alert('Erro ao salvar alterações no banco de dados.');
+      setModalError('Erro ao salvar alterações no banco de dados. Verifique a conexão.');
     } finally {
       setIsSaving(false);
     }
@@ -173,22 +267,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   // Delete Quote
   const handleDeleteQuote = async (id: string) => {
-    if (!window.confirm('Tem certeza de que deseja excluir este orçamento do banco de dados?')) {
-      return;
-    }
     try {
       await deleteQuote(id);
       setSelectedQuote(null);
+      setIsConfirmingDelete(false);
     } catch (error) {
       console.error('Erro ao excluir:', error);
-      alert('Não foi possível excluir o orçamento.');
+      setModalError('Não foi possível excluir o orçamento do banco de dados.');
     }
   };
 
   // Generate WhatsApp proposal text
   const handleSendWhatsAppProposal = (quote: Quote) => {
     if (!quote.telefone) {
-      alert('Este cliente não cadastrou telefone de contato.');
+      setModalError('Este cliente não cadastrou telefone de contato.');
       return;
     }
 
@@ -199,9 +291,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       ? `R$ ${parseFloat(editValorOrcamento.replace(',', '.')).toFixed(2).replace('.', ',')}`
       : 'sob consulta';
 
+    const targetDate = editDataMudanca.trim() || quote.dataMudanca;
+
     let msg = `Olá, *${quote.nome.trim()}*! Tudo bem?\n`;
     msg += `Aqui é o *Anderson* da *Anderson Mudanças e Transporte* 🚚\n\n`;
-    msg += `Recebemos sua solicitação de orçamento (Protocolo: *${quote.protocol}*) para a data de *${quote.dataMudanca}*.\n\n`;
+    msg += `Recebemos sua solicitação (Orçamento: *${quote.protocol}*) para a data de *${targetDate}*.\n\n`;
     msg += `📍 *Origem:* ${quote.origem}\n`;
     msg += `📍 *Destino:* ${quote.destino}\n`;
 
@@ -269,7 +363,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               Painel de Gestão
             </h2>
             <p className="text-xs sm:text-sm text-slate-600 mt-1.5">
-              Digite a senha de administrador para acessar e gerenciar os pedidos de orçamento.
+              Digite a senha de administrador para acessar e gerenciar os orçamentos.
             </p>
           </div>
 
@@ -368,7 +462,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-4">
         <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs">
-          <span className="text-[11px] font-bold text-slate-500 uppercase block">Total Pedidos</span>
+          <span className="text-[11px] font-bold text-slate-500 uppercase block">Total Orçamentos</span>
           <div className="text-2xl font-black text-slate-900 mt-1">{totalPedidos}</div>
           <span className="text-[10px] text-slate-400">Registrados</span>
         </div>
@@ -397,7 +491,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="bg-emerald-50/60 p-4 rounded-2xl border border-emerald-200 shadow-xs">
           <span className="text-[11px] font-bold text-emerald-700 uppercase block">Fechados</span>
           <div className="text-2xl font-black text-emerald-700 mt-1">{countFechados}</div>
-          <span className="text-[10px] text-emerald-600">Agendados</span>
+          <span className="text-[10px] text-emerald-600">Agendados no Google</span>
         </div>
 
         <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-xs">
@@ -418,7 +512,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Buscar por nome do cliente, protocolo, endereço ou telefone..."
+              placeholder="Buscar por nome do cliente, orçamento, endereço ou telefone..."
               className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-slate-50/50"
             />
             {searchTerm && (
@@ -466,7 +560,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             { id: 'novo', label: 'Novos' },
             { id: 'em_analise', label: 'Em Análise' },
             { id: 'orcamento_enviado', label: 'Orçados' },
-            { id: 'fechado', label: 'Fechados' },
+            { id: 'fechado', label: 'Fechados / Agendados' },
             { id: 'concluido', label: 'Concluídos' },
             { id: 'cancelado', label: 'Cancelados' },
           ].map((st) => (
@@ -491,15 +585,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         {isLoading ? (
           <div className="p-12 text-center text-slate-500 flex flex-col items-center justify-center gap-3">
             <RefreshCw className="w-6 h-6 animate-spin text-sky-600" />
-            <span className="text-sm font-medium">Carregando pedidos de mudança...</span>
+            <span className="text-sm font-medium">Carregando orçamentos de mudança...</span>
           </div>
         ) : filteredQuotes.length === 0 ? (
           <div className="p-12 text-center text-slate-500 space-y-2">
             <Package className="w-10 h-10 mx-auto text-slate-300" />
-            <h4 className="text-base font-bold text-slate-700">Nenhum pedido encontrado</h4>
+            <h4 className="text-base font-bold text-slate-700">Nenhum orçamento encontrado</h4>
             <p className="text-xs text-slate-400">
               {searchTerm || statusFilter !== 'todos' || serviceFilter !== 'todos'
-                ? 'Nenhum pedido corresponde aos filtros selecionados.'
+                ? 'Nenhum orçamento corresponde aos filtros selecionados.'
                 : 'Quando os clientes enviarem o formulário de orçamento, eles aparecerão aqui automaticamente.'}
             </p>
           </div>
@@ -519,7 +613,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <div className="space-y-1.5 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-mono text-xs font-extrabold text-sky-700 bg-sky-50 px-2 py-0.5 rounded border border-sky-200">
-                        {q.protocol}
+                        Orçamento: {q.protocol}
                       </span>
                       <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}>
                         {statusCfg.label}
@@ -587,13 +681,26 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {/* Direct Google Calendar quick button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleOpenGoogleCalendar(q, q.dataMudanca);
+                        }}
+                        className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-colors border border-emerald-200 cursor-pointer"
+                        title="Agendar diretamente na Google Agenda"
+                      >
+                        <Calendar className="w-4 h-4" />
+                      </button>
+
                       {hasPhone && (
                         <a
-                          href={`https://wa.me/${q.telefone?.replace(/\D/g, '').startsWith('55') ? q.telefone.replace(/\D/g, '') : `55${q.telefone?.replace(/\D/g, '')}`}?text=${encodeURIComponent(`Olá ${q.nome}! Aqui é o Anderson da Anderson Mudanças sobre seu orçamento ${q.protocol}.`)}`}
+                          href={`https://wa.me/${q.telefone?.replace(/\D/g, '').startsWith('55') ? q.telefone.replace(/\D/g, '') : `55${q.telefone?.replace(/\D/g, '')}`}?text=${encodeURIComponent(`Olá ${q.nome}! Aqui é o Anderson da Anderson Mudanças sobre seu orçamento nº ${q.protocol}.`)}`}
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={(e) => e.stopPropagation()}
-                          className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-colors border border-emerald-200"
+                          className="p-2 bg-sky-50 hover:bg-sky-100 text-sky-700 rounded-xl transition-colors border border-sky-200"
                           title="Chamar no WhatsApp"
                         >
                           <MessageCircle className="w-4 h-4" />
@@ -630,7 +737,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-mono text-sm font-black text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-lg border border-sky-200">
-                    {selectedQuote.protocol}
+                    Orçamento: {selectedQuote.protocol}
                   </span>
                   <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full border ${STATUS_LABELS[selectedQuote.status]?.bg} ${STATUS_LABELS[selectedQuote.status]?.text} ${STATUS_LABELS[selectedQuote.status]?.border}`}>
                     {STATUS_LABELS[selectedQuote.status]?.label}
@@ -658,14 +765,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             {/* Quick action buttons row */}
             <div className="flex flex-wrap items-center gap-2 pt-1">
+              {/* Direct Google Calendar action button */}
+              <button
+                type="button"
+                onClick={() =>
+                  handleOpenGoogleCalendar(
+                    selectedQuote,
+                    editDataMudanca,
+                    editValorOrcamento,
+                    editNotasInternas
+                  )
+                }
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
+                title="Agendar diretamente no Google Calendar"
+              >
+                <Calendar className="w-4 h-4" />
+                Agendar no Google Agenda
+              </button>
+
               {selectedQuote.telefone && (
                 <button
                   type="button"
                   onClick={() => handleSendWhatsAppProposal(selectedQuote)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-2 shadow-sm cursor-pointer"
+                  className="px-3.5 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <MessageCircle className="w-4 h-4" />
-                  Enviar Proposta pelo WhatsApp
+                  Enviar Proposta WhatsApp
                 </button>
               )}
 
@@ -673,22 +798,52 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(selectedQuote.origem)}&destination=${encodeURIComponent(selectedQuote.destino)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-200"
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-200"
               >
                 <MapPin className="w-3.5 h-3.5 text-sky-600" />
-                Ver Rota no Google Maps
+                Rota Google Maps
                 <ExternalLink className="w-3 h-3 opacity-60" />
               </a>
 
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-200 cursor-pointer"
+                className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold transition-colors flex items-center gap-1.5 border border-slate-200 cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
                 Imprimir Pedido
               </button>
             </div>
+
+            {/* Google Calendar Notice Box when Fechado / Agendado */}
+            {editStatus === 'fechado' && (
+              <div className="bg-emerald-50 border-2 border-emerald-300 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+                <div className="space-y-0.5">
+                  <span className="text-xs font-black text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <Calendar className="w-4 h-4 text-emerald-600" />
+                    Status Fechado / Agendado
+                  </span>
+                  <p className="text-xs text-emerald-700">
+                    Mudança agendada para <strong>{editDataMudanca || selectedQuote.dataMudanca}</strong>. Ao salvar alterações, o agendamento no Google Agenda abrirá automaticamente.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleOpenGoogleCalendar(
+                      selectedQuote,
+                      editDataMudanca,
+                      editValorOrcamento,
+                      editNotasInternas
+                    )
+                  }
+                  className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+                >
+                  <Calendar className="w-4 h-4" />
+                  Abrir no Google Agenda
+                </button>
+              </div>
+            )}
 
             {/* Logistics summary details */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -727,11 +882,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
             </div>
 
-            {/* Date */}
+            {/* Current Date Display */}
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs sm:text-sm">
-              <span className="text-slate-600 flex items-center gap-1.5">
+              <span className="text-slate-700 flex items-center gap-1.5 font-medium">
                 <Calendar className="w-4 h-4 text-sky-600" />
-                Data da Mudança: <strong className="text-slate-900">{selectedQuote.dataMudanca}</strong>
+                Data Registrada da Mudança: <strong className="text-slate-900">{editDataMudanca || selectedQuote.dataMudanca}</strong>
+              </span>
+              <span className="text-xs text-sky-700 font-semibold bg-sky-50 px-2.5 py-1 rounded-md border border-sky-100">
+                Pode ser alterada no campo abaixo
               </span>
             </div>
 
@@ -821,25 +979,62 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="bg-sky-50/40 p-4 sm:p-5 rounded-2xl border border-sky-200 space-y-4">
               <h4 className="text-sm font-bold text-slate-900 uppercase tracking-wider flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-sky-700" />
-                Gerenciamento do Pedido (Anderson)
+                Gerenciamento do Orçamento (Anderson)
               </h4>
 
               {saveSuccessMessage && (
                 <div className="p-3 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  {saveSuccessMessage}
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-700" />
+                  <span>{saveSuccessMessage}</span>
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {lastScheduledCalendarUrl && (
+                <div className="p-3 bg-emerald-50 text-emerald-900 rounded-xl text-xs font-medium border border-emerald-300 flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-emerald-700 shrink-0" />
+                    <span>Mudança agendada para <strong>{editDataMudanca || selectedQuote.dataMudanca}</strong>!</span>
+                  </div>
+                  <a
+                    href={lastScheduledCalendarUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs transition-colors shadow-xs"
+                  >
+                    Abrir no Google Agenda
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                </div>
+              )}
+
+              {modalError && (
+                <div className="p-3 bg-rose-100 text-rose-800 rounded-xl text-xs font-semibold flex items-center justify-between gap-2 border border-rose-300">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>{modalError}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setModalError(null)}
+                    className="text-rose-700 hover:text-rose-900 text-xs font-bold cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Status selector */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Status do Pedido:
+                    Status do Orçamento:
                   </label>
                   <select
                     value={editStatus}
-                    onChange={(e) => setEditStatus(e.target.value as QuoteStatus)}
+                    onChange={(e) => {
+                      const newSt = e.target.value as QuoteStatus;
+                      setEditStatus(newSt);
+                    }}
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-semibold bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
                   >
                     <option value="novo">Novo Pedido</option>
@@ -849,6 +1044,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     <option value="concluido">Mudança Concluída</option>
                     <option value="cancelado">Cancelado</option>
                   </select>
+                </div>
+
+                {/* Alterar Data da Mudança */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Alterar Data da Mudança:
+                  </label>
+                  <input
+                    type="date"
+                    value={editDataMudanca}
+                    onChange={(e) => setEditDataMudanca(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
+                  />
                 </div>
 
                 {/* Quoted Price */}
@@ -883,26 +1091,71 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 />
               </div>
 
-              {/* Save & Delete Buttons */}
-              <div className="flex items-center justify-between gap-3 pt-2">
-                <button
-                  type="button"
-                  disabled={isSaving}
-                  onClick={handleSaveQuoteChanges}
-                  className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
-                >
-                  <Save className="w-4 h-4" />
-                  {isSaving ? 'Salvando...' : 'Salvar Alterações'}
-                </button>
+              {/* Inline Delete Confirmation if requested */}
+              {isConfirmingDelete && (
+                <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl flex items-center justify-between gap-3 flex-wrap">
+                  <span className="text-xs font-bold text-rose-800">
+                    Tem certeza de que deseja excluir este orçamento permanentemente do banco?
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteQuote(selectedQuote.id!)}
+                      className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                    >
+                      Sim, Excluir
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsConfirmingDelete(false)}
+                      className="px-3.5 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold rounded-lg transition-colors cursor-pointer"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
 
-                <button
-                  type="button"
-                  onClick={() => handleDeleteQuote(selectedQuote.id!)}
-                  className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs rounded-xl transition-colors flex items-center gap-1.5 border border-rose-200 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  Excluir Pedido
-                </button>
+              {/* Save & Delete Buttons */}
+              <div className="flex items-center justify-between gap-3 pt-2 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={handleSaveQuoteChanges}
+                    className="px-5 py-2.5 bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-colors shadow-sm flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                  </button>
+
+                  <a
+                    href={getGoogleCalendarUrl(
+                      selectedQuote,
+                      editDataMudanca,
+                      editValorOrcamento,
+                      editNotasInternas
+                    )}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3.5 py-2.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs rounded-xl transition-colors border border-emerald-300 flex items-center gap-1.5"
+                    title="Adicionar evento diretamente na Google Agenda"
+                  >
+                    <Calendar className="w-4 h-4 text-emerald-600" />
+                    Agendar no Google
+                  </a>
+                </div>
+
+                {!isConfirmingDelete && (
+                  <button
+                    type="button"
+                    onClick={() => setIsConfirmingDelete(true)}
+                    className="px-3.5 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 font-semibold text-xs rounded-xl transition-colors flex items-center gap-1.5 border border-rose-200 cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Excluir Orçamento
+                  </button>
+                )}
               </div>
 
             </div>
