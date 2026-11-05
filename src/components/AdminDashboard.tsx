@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { Quote, QuoteStatus } from '../types/quote';
 import { subscribeQuotes, updateQuote, deleteQuote } from '../services/quotesService';
+import { formatDateBR } from '../utils/dateUtils';
 
 interface AdminDashboardProps {
   isAdmin: boolean;
@@ -164,14 +165,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     targetNotas?: string
   ): string => {
     const title = `🚚 Mudança - ${quote.nome} (Orçamento: ${quote.protocol})`;
-    const dateClean = (targetDate || quote.dataMudanca || '').replace(/-/g, '').trim();
-    const datesParam = dateClean ? `${dateClean}T080000/${dateClean}T180000` : '';
+    const rawDate = (targetDate || quote.dataMudanca || '').trim();
+    let datesParam = '';
+    if (rawDate) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
+        const clean = rawDate.replace(/-/g, '');
+        datesParam = `${clean}T080000/${clean}T180000`;
+      } else if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(rawDate)) {
+        const [d, m, y] = rawDate.split(/[-/]/);
+        datesParam = `${y}${m.padStart(2, '0')}${d.padStart(2, '0')}T080000/${y}${m.padStart(2, '0')}${d.padStart(2, '0')}T180000`;
+      } else {
+        const clean = rawDate.replace(/-/g, '').trim();
+        datesParam = clean ? `${clean}T080000/${clean}T180000` : '';
+      }
+    }
     const location = `${quote.origem} ➔ ${quote.destino}`;
 
     let details = `🚚 ANDERSON MUDANÇAS E TRANSPORTE\n`;
     details += `📄 Orçamento: ${quote.protocol}\n`;
     details += `👤 Cliente: ${quote.nome}\n`;
     if (quote.telefone) details += `📱 WhatsApp/Tel: ${quote.telefone}\n`;
+    if (rawDate) details += `📅 Data da Mudança: ${formatDateBR(rawDate)}\n`;
     details += `\n📍 Origem: ${quote.origem} (${quote.tipoOrigem}${quote.detalhesOrigem ? ' - ' + quote.detalhesOrigem : ''})\n`;
     details += `📍 Destino: ${quote.destino} (${quote.tipoDestino}${quote.detalhesDestino ? ' - ' + quote.detalhesDestino : ''})\n`;
 
@@ -295,7 +309,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     let msg = `Olá, *${quote.nome.trim()}*! Tudo bem?\n`;
     msg += `Aqui é o *Anderson* da *Anderson Mudanças e Transporte* 🚚\n\n`;
-    msg += `Recebemos sua solicitação (Orçamento: *${quote.protocol}*) para a data de *${targetDate}*.\n\n`;
+    msg += `Recebemos sua solicitação (Orçamento: *${quote.protocol}*) para a data de *${formatDateBR(targetDate)}*.\n\n`;
     msg += `📍 *Origem:* ${quote.origem}\n`;
     msg += `📍 *Destino:* ${quote.destino}\n`;
 
@@ -620,7 +634,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       </span>
                       <span className="text-xs text-slate-500 flex items-center gap-1 font-medium">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        {q.dataMudanca}
+                        {formatDateBR(q.dataMudanca)}
                       </span>
                     </div>
 
@@ -824,7 +838,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Status Fechado / Agendado
                   </span>
                   <p className="text-xs text-emerald-700">
-                    Mudança agendada para <strong>{editDataMudanca || selectedQuote.dataMudanca}</strong>. Ao salvar alterações, o agendamento no Google Agenda abrirá automaticamente.
+                    Mudança agendada para <strong>{formatDateBR(editDataMudanca || selectedQuote.dataMudanca)}</strong>. Ao salvar alterações, o agendamento no Google Agenda abrirá automaticamente.
                   </p>
                 </div>
                 <button
@@ -886,7 +900,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs sm:text-sm">
               <span className="text-slate-700 flex items-center gap-1.5 font-medium">
                 <Calendar className="w-4 h-4 text-sky-600" />
-                Data Registrada da Mudança: <strong className="text-slate-900">{editDataMudanca || selectedQuote.dataMudanca}</strong>
+                Data Registrada da Mudança: <strong className="text-slate-900">{formatDateBR(editDataMudanca || selectedQuote.dataMudanca)}</strong>
               </span>
               <span className="text-xs text-sky-700 font-semibold bg-sky-50 px-2.5 py-1 rounded-md border border-sky-100">
                 Pode ser alterada no campo abaixo
@@ -993,7 +1007,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 <div className="p-3 bg-emerald-50 text-emerald-900 rounded-xl text-xs font-medium border border-emerald-300 flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-emerald-700 shrink-0" />
-                    <span>Mudança agendada para <strong>{editDataMudanca || selectedQuote.dataMudanca}</strong>!</span>
+                    <span>Mudança agendada para <strong>{formatDateBR(editDataMudanca || selectedQuote.dataMudanca)}</strong>!</span>
                   </div>
                   <a
                     href={lastScheduledCalendarUrl}
@@ -1049,14 +1063,22 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {/* Alterar Data da Mudança */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Alterar Data da Mudança:
+                    Alterar Data da Mudança (dia-mês-ano):
                   </label>
-                  <input
-                    type="date"
-                    value={editDataMudanca}
-                    onChange={(e) => setEditDataMudanca(e.target.value)}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
-                  />
+                  <div className="flex flex-col gap-1.5">
+                    <input
+                      type="date"
+                      value={editDataMudanca}
+                      onChange={(e) => setEditDataMudanca(e.target.value)}
+                      className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
+                    />
+                    {editDataMudanca && (
+                      <span className="text-[11px] font-bold text-sky-800 bg-sky-50 border border-sky-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 w-fit">
+                        <Calendar className="w-3 h-3 text-sky-600" />
+                        {formatDateBR(editDataMudanca)} (dia/mês/ano)
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Quoted Price */}

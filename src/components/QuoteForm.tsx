@@ -23,6 +23,7 @@ import {
 import { CardboardBoxSvg } from './CardboardBoxSvg';
 import { createQuote, generateProtocol } from '../services/quotesService';
 import { PropertyType } from '../types/quote';
+import { formatDateBR } from '../utils/dateUtils';
 
 interface QuoteFormProps {
   onSuccessCreated?: (protocol: string) => void;
@@ -110,11 +111,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
         ? `Casa (${tipoCasaDestino})`
         : `Apartamento | Elevador: ${elevadorDestino} | Andar: ${andarDestino || 'Não informado'}`;
 
-    let dataFormatada = dataMudanca;
-    if (dataMudanca.includes('-')) {
-      const [y, m, d] = dataMudanca.split('-');
-      dataFormatada = `${d}/${m}/${y}`;
-    }
+    const dataFormatada = formatDateBR(dataMudanca);
 
     let msg = `🚚 *SOLICITAÇÃO DE ORÇAMENTO - ANDERSON MUDANÇAS*\n`;
     msg += `📄 *Orçamento:* ${protocol}\n\n`;
@@ -628,14 +625,25 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
 
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Data *
+              Data da Mudança (dia-mês-ano) *
             </label>
-            <input
-              type="date"
-              value={dataMudanca}
-              onChange={(e) => setDataMudanca(e.target.value)}
-              className="w-full sm:w-72 px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 bg-slate-50/50"
-            />
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
+              <input
+                type="date"
+                value={dataMudanca}
+                onChange={(e) => setDataMudanca(e.target.value)}
+                className="w-full sm:w-72 px-3.5 py-2.5 rounded-xl border border-slate-300 text-slate-800 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-sky-500 bg-slate-50/50 cursor-pointer"
+              />
+              {dataMudanca && (
+                <span className="text-xs font-bold text-sky-800 bg-sky-50 border border-sky-200 px-3 py-2 rounded-xl inline-flex items-center gap-1.5 shrink-0">
+                  <Calendar className="w-3.5 h-3.5 text-sky-600" />
+                  {formatDateBR(dataMudanca)} (dia/mês/ano)
+                </span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-1">
+              Formato: dia, mês e ano pretendidos para o transporte.
+            </p>
           </div>
         </div>
 
@@ -1090,7 +1098,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
               <div><strong>Cliente:</strong> {nome}</div>
               <div><strong>Origem:</strong> {origem} ({tipoOrigem})</div>
               <div><strong>Destino:</strong> {destino} ({tipoDestino})</div>
-              <div><strong>Data:</strong> {dataMudanca}</div>
+              <div><strong>Data:</strong> {formatDateBR(dataMudanca)}</div>
               {precisaCaixas && (
                 <div><strong>Caixas:</strong> {quantidadeCaixas} unidades ({totalCalculadoCaixas})</div>
               )}
