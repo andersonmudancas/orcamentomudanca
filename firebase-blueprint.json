@@ -132,6 +132,11 @@
           "description": "Confirmed available moving date in YYYY-MM-DD or DD/MM/YYYY format",
           "maxLength": 20
         },
+        "horarioDisponivel": {
+          "type": "string",
+          "description": "Confirmed start time or shift for moving (e.g. 08:00)",
+          "maxLength": 50
+        },
         "formaPagamento": {
           "type": "string",
           "description": "Payment method agreed (e.g. Pix)",

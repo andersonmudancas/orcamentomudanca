@@ -52,6 +52,7 @@ service cloud.firestore {
         (!('valorDesmontagem' in data) || (data.valorDesmontagem is number && data.valorDesmontagem >= 0)) &&
         (!('valorEmbalagem' in data) || (data.valorEmbalagem is number && data.valorEmbalagem >= 0)) &&
         (!('dataDisponivel' in data) || (data.dataDisponivel is string && data.dataDisponivel.size() <= 20)) &&
+        (!('horarioDisponivel' in data) || (data.horarioDisponivel is string && data.horarioDisponivel.size() <= 50)) &&
         (!('formaPagamento' in data) || (data.formaPagamento is string && data.formaPagamento.size() <= 100)) &&
         (!('notasInternas' in data) || (data.notasInternas is string && data.notasInternas.size() <= 2000));
     }

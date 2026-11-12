@@ -42,6 +42,7 @@ export interface Quote {
   valorDesmontagem?: number;
   valorEmbalagem?: number;
   dataDisponivel?: string;
+  horarioDisponivel?: string;
   formaPagamento?: string;
   notasInternas?: string;
   createdAt: any;

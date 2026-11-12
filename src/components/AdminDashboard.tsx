@@ -26,6 +26,7 @@ import {
   Copy,
   Check,
   DollarSign,
+  Clock,
 } from 'lucide-react';
 import { Quote, QuoteStatus } from '../types/quote';
 import { subscribeQuotes, updateQuote, deleteQuote } from '../services/quotesService';
@@ -102,7 +103,8 @@ export function buildProposalMessage(
   valorDesmontagemTarget: string = '',
   valorEmbalagemTarget: string = '',
   formaPagamentoTarget: string = 'Pix.',
-  condicaoTarget: string = 'Pagamento no término da mudança.'
+  condicaoTarget: string = 'Pagamento no término da mudança.',
+  horarioDisponivelTarget: string = ''
 ): string {
   const primeiroNome = quote.nome.trim().split(' ')[0] || quote.nome.trim();
 
@@ -284,7 +286,9 @@ export function buildProposalMessage(
 
   msg += `📅 **Data solicitada:** ${dataMudancaFormatada}\n`;
   if (dataDisponivelFormatada) {
-    msg += `📅 **Data disponível:** ${dataDisponivelFormatada}\n`;
+    const timeToDisplay = (horarioDisponivelTarget || quote.horarioDisponivel || '').trim();
+    const timeSuffix = timeToDisplay ? ` às ${timeToDisplay}` : '';
+    msg += `📅 **Data disponível:** ${dataDisponivelFormatada}${timeSuffix}\n`;
   }
   msg += `\n`;
 
@@ -334,6 +338,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [editNotasInternas, setEditNotasInternas] = useState<string>('');
   const [editDataMudanca, setEditDataMudanca] = useState<string>('');
   const [editDataDisponivel, setEditDataDisponivel] = useState<string>('');
+  const [editHorarioDisponivel, setEditHorarioDisponivel] = useState<string>('');
   const [editFormaPagamento, setEditFormaPagamento] = useState<string>('Pix.');
   const [editCondicaoPagamento, setEditCondicaoPagamento] = useState<string>('Pagamento no término da mudança.');
   const [customProposalText, setCustomProposalText] = useState<string>('');
@@ -410,6 +415,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
     const initialDataDisp = quote.dataDisponivel || quote.dataMudanca || '';
     setEditDataDisponivel(initialDataDisp);
+    const initialHorarioDisp = quote.horarioDisponivel || '';
+    setEditHorarioDisponivel(initialHorarioDisp);
     const initialForma = quote.formaPagamento || 'Pix.';
     setEditFormaPagamento(initialForma);
     const initialCondicao = 'Pagamento no término da mudança.';
@@ -442,7 +449,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       initialValorDesmontagem,
       initialValorEmbalagem,
       initialForma,
-      initialCondicao
+      initialCondicao,
+      initialHorarioDisp
     );
     setCustomProposalText(generated);
   };
@@ -457,7 +465,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     desmontagem: string,
     embalagem: string,
     forma: string,
-    condicao: string
+    condicao: string,
+    horarioDisponivel: string = editHorarioDisponivel
   ) => {
     const msg = buildProposalMessage(
       quote,
@@ -468,9 +477,27 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       desmontagem,
       embalagem,
       forma,
-      condicao
+      condicao,
+      horarioDisponivel
     );
     setCustomProposalText(msg);
+  };
+
+  const handleHorarioDisponivelChange = (val: string) => {
+    setEditHorarioDisponivel(val);
+    if (!selectedQuote) return;
+    updateProposalPreview(
+      selectedQuote,
+      editDataMudanca,
+      editDataDisponivel,
+      editValorOrcamento,
+      editValorTransporte,
+      editValorDesmontagem,
+      editValorEmbalagem,
+      editFormaPagamento,
+      editCondicaoPagamento,
+      val
+    );
   };
 
   // Computes the automatic sum of all services + boxes
@@ -562,27 +589,45 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   };
 
-  // Google Calendar URL generator - Uses Data Disponível for the event date
+  // Google Calendar URL generator - Uses Data Disponível and Horário for the event date/time
   const getGoogleCalendarUrl = (
     quote: Quote,
     targetDate?: string,
     targetValor?: string,
-    targetNotas?: string
+    targetNotas?: string,
+    targetHorario?: string
   ): string => {
     const title = `🚚 Mudança - ${quote.nome} (Orçamento: ${quote.protocol})`;
     // Prioritize targetDate, then confirmed dataDisponivel, then dataMudanca
     const rawDate = (targetDate || quote.dataDisponivel || quote.dataMudanca || '').trim();
+    const rawHorario = (targetHorario !== undefined ? targetHorario : (quote.horarioDisponivel || '')).trim();
+
     let datesParam = '';
     if (rawDate) {
+      let cleanDate = '';
       if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
-        const clean = rawDate.replace(/-/g, '');
-        datesParam = `${clean}T080000/${clean}T180000`;
+        cleanDate = rawDate.replace(/-/g, '');
       } else if (/^\d{1,2}[-/]\d{1,2}[-/]\d{4}$/.test(rawDate)) {
         const [d, m, y] = rawDate.split(/[-/]/);
-        datesParam = `${y}${m.padStart(2, '0')}${d.padStart(2, '0')}T080000/${y}${m.padStart(2, '0')}${d.padStart(2, '0')}T180000`;
+        cleanDate = `${y}${m.padStart(2, '0')}${d.padStart(2, '0')}`;
       } else {
-        const clean = rawDate.replace(/-/g, '').trim();
-        datesParam = clean ? `${clean}T080000/${clean}T180000` : '';
+        cleanDate = rawDate.replace(/-/g, '').trim();
+      }
+
+      if (cleanDate) {
+        if (rawHorario && /^\d{1,2}:\d{2}$/.test(rawHorario)) {
+          const [hStr, mStr] = rawHorario.split(':');
+          const startH = parseInt(hStr, 10);
+          const startM = parseInt(mStr, 10);
+          const endH = Math.min(23, startH + 4);
+          const sH = String(startH).padStart(2, '0');
+          const sM = String(startM).padStart(2, '0');
+          const eH = String(endH).padStart(2, '0');
+          const eM = sM;
+          datesParam = `${cleanDate}T${sH}${sM}00/${cleanDate}T${eH}${eM}00`;
+        } else {
+          datesParam = `${cleanDate}T080000/${cleanDate}T180000`;
+        }
       }
     }
     const location = `${quote.origem} ➔ ${quote.destino}`;
@@ -591,7 +636,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     details += `📄 Orçamento: ${quote.protocol}\n`;
     details += `👤 Cliente: ${quote.nome}\n`;
     if (quote.telefone) details += `📱 WhatsApp/Tel: ${quote.telefone}\n`;
-    if (rawDate) details += `📅 Data Disponível / Agendada: ${formatDateBR(rawDate)}\n`;
+    if (rawDate) {
+      details += `📅 Data Disponível / Agendada: ${formatDateBR(rawDate)}${rawHorario ? ` às ${rawHorario}` : ''}\n`;
+    }
+    if (rawHorario) {
+      details += `⏰ Horário de Início: ${rawHorario}\n`;
+    }
     if (quote.dataMudanca && quote.dataMudanca !== rawDate) {
       details += `📅 Data Solicitada Originalmente: ${formatDateBR(quote.dataMudanca)}\n`;
     }
@@ -637,10 +687,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     quote: Quote,
     targetDate?: string,
     targetValor?: string,
-    targetNotas?: string
+    targetNotas?: string,
+    targetHorario?: string
   ) => {
     const calendarDate = targetDate || quote.dataDisponivel || quote.dataMudanca;
-    const url = getGoogleCalendarUrl(quote, calendarDate, targetValor, targetNotas);
+    const calendarHorario = targetHorario !== undefined ? targetHorario : (quote.horarioDisponivel || '');
+    const url = getGoogleCalendarUrl(quote, calendarDate, targetValor, targetNotas, calendarHorario);
     try {
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e) {
@@ -675,6 +727,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         notasInternas: editNotasInternas.trim(),
         dataMudanca: newDate,
         dataDisponivel: newDateDisponivel,
+        horarioDisponivel: editHorarioDisponivel.trim(),
         formaPagamento: editFormaPagamento.trim(),
       };
 
@@ -694,12 +747,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       setSaveSuccessMessage('Alterações salvas com sucesso!');
 
-      // Se o status for ou se tornou Fechado / Agendado, atualiza o link direto do Google Agenda com a DATA DISPONÍVEL
+      // Se o status for ou se tornou Fechado / Agendado, atualiza o link direto do Google Agenda com a DATA DISPONÍVEL e HORÁRIO
       if (isNowFechado) {
-        const calUrl = getGoogleCalendarUrl(selectedQuote, newDateDisponivel, editValorOrcamento, editNotasInternas);
+        const calUrl = getGoogleCalendarUrl(
+          selectedQuote,
+          newDateDisponivel,
+          editValorOrcamento,
+          editNotasInternas,
+          editHorarioDisponivel.trim()
+        );
         setLastScheduledCalendarUrl(calUrl);
         if (statusJustChangedToFechado) {
-          handleOpenGoogleCalendar(selectedQuote, newDateDisponivel, editValorOrcamento, editNotasInternas);
+          handleOpenGoogleCalendar(
+            selectedQuote,
+            newDateDisponivel,
+            editValorOrcamento,
+            editNotasInternas,
+            editHorarioDisponivel.trim()
+          );
         }
       }
 
@@ -758,7 +823,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           editValorDesmontagem,
           editValorEmbalagem,
           editFormaPagamento,
-          editCondicaoPagamento
+          editCondicaoPagamento,
+          editHorarioDisponivel
         );
 
     const url = `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(msg)}`;
@@ -782,7 +848,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           editValorDesmontagem,
           editValorEmbalagem,
           editFormaPagamento,
-          editCondicaoPagamento
+          editCondicaoPagamento,
+          editHorarioDisponivel
         );
 
     if (navigator.clipboard) {
@@ -1095,10 +1162,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${statusCfg.bg} ${statusCfg.text} ${statusCfg.border}`}>
                         {statusCfg.label}
                       </span>
-                      <span className="text-xs text-slate-500 flex items-center gap-1 font-medium">
+                      <span className="text-xs text-slate-500 flex items-center gap-1 font-medium" title="Data solicitada pelo cliente">
                         <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                        {formatDateBR(q.dataMudanca)}
+                        <span className="text-slate-400">Sol:</span> {formatDateBR(q.dataMudanca)}
                       </span>
+                      {q.dataDisponivel && (
+                        <span className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1 font-semibold" title="Data e horário disponíveis confirmados">
+                          <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>Disp: {formatDateBR(q.dataDisponivel)}{q.horarioDisponivel ? ` às ${q.horarioDisponivel}` : ''}</span>
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -1163,10 +1236,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleOpenGoogleCalendar(q, q.dataDisponivel || q.dataMudanca);
+                          handleOpenGoogleCalendar(q, q.dataDisponivel || q.dataMudanca, undefined, undefined, q.horarioDisponivel);
                         }}
                         className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-colors border border-emerald-200 cursor-pointer"
-                        title="Agendar diretamente na Google Agenda"
+                        title="Agendar diretamente na Google Agenda (com data e horário disponíveis)"
                       >
                         <Calendar className="w-4 h-4" />
                       </button>
@@ -1250,11 +1323,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     selectedQuote,
                     editDataDisponivel.trim() || selectedQuote.dataDisponivel || editDataMudanca,
                     editValorOrcamento,
-                    editNotasInternas
+                    editNotasInternas,
+                    editHorarioDisponivel.trim()
                   )
                 }
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-                title="Agendar diretamente no Google Calendar na data disponível"
+                title="Agendar diretamente no Google Calendar na data disponível e horário"
               >
                 <Calendar className="w-4 h-4" />
                 Agendar no Google Agenda
@@ -1301,7 +1375,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Status Fechado / Agendado
                   </span>
                   <p className="text-xs text-emerald-700">
-                    Mudança agendada para a <strong>Data Disponível: {formatDateBR(editDataDisponivel.trim() || selectedQuote.dataDisponivel || editDataMudanca || selectedQuote.dataMudanca)}</strong>. Ao salvar alterações, o agendamento no Google Agenda abrirá automaticamente.
+                    Mudança agendada para a <strong>Data Disponível: {formatDateBR(editDataDisponivel.trim() || selectedQuote.dataDisponivel || editDataMudanca || selectedQuote.dataMudanca)}{editHorarioDisponivel ? ` às ${editHorarioDisponivel}` : ''}</strong>. Ao salvar alterações, o agendamento no Google Agenda abrirá automaticamente.
                   </p>
                 </div>
                 <button
@@ -1311,7 +1385,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       selectedQuote,
                       editDataDisponivel.trim() || selectedQuote.dataDisponivel || editDataMudanca,
                       editValorOrcamento,
-                      editNotasInternas
+                      editNotasInternas,
+                      editHorarioDisponivel.trim()
                     )
                   }
                   className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center justify-center gap-2 shrink-0 cursor-pointer"
@@ -1500,8 +1575,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               )}
 
-              {/* Row 1: Status and Dates */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* Row 1: Status, Datas e Horário */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                 {/* Status selector */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
@@ -1546,7 +1621,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             editValorDesmontagem,
                             editValorEmbalagem,
                             editFormaPagamento,
-                            editCondicaoPagamento
+                            editCondicaoPagamento,
+                            editHorarioDisponivel
                           );
                         }
                       }}
@@ -1584,7 +1660,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                             editValorDesmontagem,
                             editValorEmbalagem,
                             editFormaPagamento,
-                            editCondicaoPagamento
+                            editCondicaoPagamento,
+                            editHorarioDisponivel
                           );
                         }
                       }}
@@ -1593,9 +1670,54 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     {editDataDisponivel && (
                       <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 w-fit">
                         <Check className="w-3 h-3 text-emerald-600" />
-                        Disponível: {formatDateBR(editDataDisponivel)}
+                        {formatDateBR(editDataDisponivel)}
                       </span>
                     )}
+                  </div>
+                </div>
+
+                {/* Horário Disponível - CAMPO EXIGIDO */}
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 uppercase mb-1 flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-emerald-600" />
+                    Horário Disponível:
+                  </label>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="time"
+                        value={editHorarioDisponivel}
+                        onChange={(e) => handleHorarioDisponivelChange(e.target.value)}
+                        className="w-full px-3 py-2 rounded-xl border-2 border-emerald-400 text-sm font-bold text-slate-900 bg-emerald-50/40 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                      />
+                      {editHorarioDisponivel && (
+                        <button
+                          type="button"
+                          onClick={() => handleHorarioDisponivelChange('')}
+                          className="px-2 py-2 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-slate-100 text-xs font-bold cursor-pointer"
+                          title="Remover horário"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                    {/* Botões rápidos de horários frequentes */}
+                    <div className="flex items-center gap-1 flex-wrap pt-0.5">
+                      {['08:00', '09:00', '13:00', '14:00'].map((h) => (
+                        <button
+                          key={h}
+                          type="button"
+                          onClick={() => handleHorarioDisponivelChange(h)}
+                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
+                            editHorarioDisponivel === h
+                              ? 'bg-emerald-600 text-white border-emerald-700 shadow-2xs'
+                              : 'bg-white hover:bg-emerald-50 text-emerald-800 border-emerald-200'
+                          }`}
+                        >
+                          {h}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1896,7 +2018,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                           editValorDesmontagem,
                           editValorEmbalagem,
                           editFormaPagamento,
-                          editCondicaoPagamento
+                          editCondicaoPagamento,
+                          editHorarioDisponivel
                         );
                         setCustomProposalText(fresh);
                       }}
@@ -2015,7 +2138,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                       selectedQuote,
                       editDataDisponivel.trim() || selectedQuote.dataDisponivel || editDataMudanca,
                       editValorOrcamento,
-                      editNotasInternas
+                      editNotasInternas,
+                      editHorarioDisponivel.trim()
                     )}
                     target="_blank"
                     rel="noopener noreferrer"
