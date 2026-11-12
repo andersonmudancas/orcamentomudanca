@@ -23,6 +23,9 @@ import {
   ShieldCheck,
   Phone,
   ArrowRight,
+  Copy,
+  Check,
+  DollarSign,
 } from 'lucide-react';
 import { Quote, QuoteStatus } from '../types/quote';
 import { subscribeQuotes, updateQuote, deleteQuote } from '../services/quotesService';
@@ -73,6 +76,236 @@ const STATUS_LABELS: Record<QuoteStatus, { label: string; bg: string; text: stri
   },
 };
 
+export function parseCurrency(val: number | string | undefined | null): number {
+  if (val === undefined || val === null || val === '') return 0;
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  const clean = String(val).replace('R$', '').trim().replace(/\./g, '').replace(',', '.');
+  const num = parseFloat(clean);
+  return isNaN(num) ? 0 : num;
+}
+
+export function formatCurrencyBR(val: number | string | undefined | null): string {
+  const num = parseCurrency(val);
+  return `R$ ${num.toFixed(2).replace('.', ',')}`;
+}
+
+/**
+ * Formats the customer WhatsApp proposal strictly according to the official Anderson Mudanças template,
+ * including itemized breakdown for disassembly, packaging, automatic box calculation, and total.
+ */
+export function buildProposalMessage(
+  quote: Quote,
+  dataMudancaTarget: string,
+  dataDisponivelTarget: string,
+  valorTotalTarget: string,
+  valorTransporteTarget: string = '',
+  valorDesmontagemTarget: string = '',
+  valorEmbalagemTarget: string = '',
+  formaPagamentoTarget: string = 'Pix.',
+  condicaoTarget: string = 'Pagamento no término da mudança.'
+): string {
+  const primeiroNome = quote.nome.trim().split(' ')[0] || quote.nome.trim();
+
+  // Format Origem
+  const origemDesc = quote.origem.trim();
+  let origemDetalhes = '';
+  if (quote.tipoOrigem === 'Casa') {
+    const tipoCasa = quote.tipoCasaOrigem ? quote.tipoCasaOrigem.toLowerCase() : 'térrea';
+    origemDetalhes = `Casa ${tipoCasa}.`;
+  } else {
+    const elev = quote.elevadorOrigem === 'Sim' ? 'com elevador' : quote.elevadorOrigem === 'Não' ? 'sem elevador' : '';
+    const andar = quote.andarOrigem ? `${quote.andarOrigem} andar` : '';
+    if (andar && elev) {
+      origemDetalhes = `Apartamento no ${andar}, ${elev}.`;
+    } else if (andar) {
+      origemDetalhes = `Apartamento no ${andar}.`;
+    } else if (elev) {
+      origemDetalhes = `Apartamento, ${elev}.`;
+    } else {
+      origemDetalhes = `Apartamento.`;
+    }
+  }
+  if (quote.detalhesOrigem && !origemDetalhes.toLowerCase().includes(quote.detalhesOrigem.toLowerCase())) {
+    origemDetalhes += ` ${quote.detalhesOrigem.trim()}`;
+  }
+
+  // Format Destino
+  const destinoDesc = quote.destino.trim();
+  let destinoDetalhes = '';
+  if (quote.tipoDestino === 'Casa') {
+    const tipoCasa = quote.tipoCasaDestino ? quote.tipoCasaDestino.toLowerCase() : 'térrea';
+    destinoDetalhes = `Casa ${tipoCasa}.`;
+  } else {
+    const elev = quote.elevadorDestino === 'Sim' ? 'com elevador' : quote.elevadorDestino === 'Não' ? 'sem elevador' : '';
+    const andar = quote.andarDestino ? `${quote.andarDestino} andar` : '';
+    if (andar && elev) {
+      destinoDetalhes = `Apartamento no ${andar}, ${elev}.`;
+    } else if (andar) {
+      destinoDetalhes = `Apartamento no ${andar}.`;
+    } else if (elev) {
+      destinoDetalhes = `Apartamento, ${elev}.`;
+    } else {
+      destinoDetalhes = `Apartamento.`;
+    }
+  }
+  if (quote.detalhesDestino && !destinoDetalhes.toLowerCase().includes(quote.detalhesDestino.toLowerCase())) {
+    destinoDetalhes += ` ${quote.detalhesDestino.trim()}`;
+  }
+
+  // Dates
+  const rawDataMudanca = dataMudancaTarget.trim() || quote.dataMudanca || '';
+  const rawDataDisponivel = dataDisponivelTarget.trim() || rawDataMudanca;
+  const dataMudancaFormatada = formatDateBR(rawDataMudanca);
+  const dataDisponivelFormatada = formatDateBR(rawDataDisponivel);
+
+  // Items list (excluding box supplies if requested, as requested boxes are a service/supply)
+  let itensFormatados = '';
+  if (quote.itens && quote.itens.trim()) {
+    let rawLines = quote.itens
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+
+    // If client requested boxes, exclude box supply lines from items to transport
+    if (quote.precisaCaixas) {
+      rawLines = rawLines.filter((line) => {
+        const clean = line.replace(/^[\*\-•\d\.\)\s]+/, '').trim().toLowerCase();
+        return !/^(caixas\s+com\s+pertences|caixas\s+de\s+papel[aã]o|caixas\s+para\s+embalar)$/i.test(clean);
+      });
+    }
+
+    if (rawLines.length > 1) {
+      itensFormatados = rawLines
+        .map((line) => {
+          const clean = line.replace(/^[\*\-•\d\.\)\s]+/, '').trim();
+          return `* ${clean || line}`;
+        })
+        .join('\n');
+    } else if (rawLines.length === 1) {
+      const parts = rawLines[0].split(/[,;]/).map((p) => p.trim()).filter(Boolean);
+      const filteredParts = quote.precisaCaixas
+        ? parts.filter((p) => {
+            const clean = p.replace(/^[\*\-•\d\.\)\s]+/, '').trim().toLowerCase();
+            return !/^(caixas\s+com\s+pertences|caixas\s+de\s+papel[aã]o|caixas\s+para\s+embalar)$/i.test(clean);
+          })
+        : parts;
+      if (filteredParts.length > 1) {
+        itensFormatados = filteredParts.map((p) => `* ${p.replace(/^[\*\-•\s]+/, '').trim()}`).join('\n');
+      } else if (filteredParts.length === 1) {
+        itensFormatados = `* ${filteredParts[0].replace(/^[\*\-•\s]+/, '').trim()}`;
+      } else {
+        itensFormatados = '* Pertences e móveis gerais da mudança';
+      }
+    } else {
+      itensFormatados = '* Pertences e móveis gerais da mudança';
+    }
+  } else {
+    itensFormatados = '* Pertences e móveis gerais da mudança';
+  }
+
+  // Services
+  const servicos = [
+    '✔ Carregamento dos itens',
+    '✔ Transporte até o endereço de destino',
+    '✔ Descarregamento dos itens',
+    '✔ Proteção básica dos móveis com cobertores durante o transporte',
+  ];
+
+  if (quote.precisaDesmontagem) {
+    const qtdDesm = quote.itensDesmontagem?.length ? ` (${quote.itensDesmontagem.length} itens)` : '';
+    servicos.push(`✔ Desmontagem e montagem de móveis${qtdDesm}`);
+  }
+  if (quote.precisaEmbalagem) {
+    const qtdEmb = quote.itensEmbalagem?.length ? ` (${quote.itensEmbalagem.length} itens)` : '';
+    servicos.push(`✔ Serviço de embalagem dos móveis${qtdEmb}`);
+  }
+  if (quote.precisaCaixas && quote.quantidadeCaixas) {
+    servicos.push(`✔ Fornecimento de ${quote.quantidadeCaixas} caixas de papelão reforçadas`);
+  }
+
+  // Detailed values and Total
+  const numTransporte = parseCurrency(valorTransporteTarget);
+  const numDesmontagem = quote.precisaDesmontagem ? parseCurrency(valorDesmontagemTarget) : 0;
+  const numEmbalagem = quote.precisaEmbalagem ? parseCurrency(valorEmbalagemTarget) : 0;
+  const numCaixas = (quote.precisaCaixas && (quote.quantidadeCaixas || 0) > 0)
+    ? (quote.quantidadeCaixas || 0) * 3
+    : 0;
+
+  let totalCalculado = parseCurrency(valorTotalTarget);
+  if (!totalCalculado && (numTransporte > 0 || numDesmontagem > 0 || numEmbalagem > 0 || numCaixas > 0)) {
+    totalCalculado = numTransporte + numDesmontagem + numEmbalagem + numCaixas;
+  }
+  const valorTotalFormatado = totalCalculado > 0
+    ? `R$ ${totalCalculado.toFixed(2).replace('.', ',')}`
+    : (valorTotalTarget && valorTotalTarget.trim() ? (valorTotalTarget.includes('R$') ? valorTotalTarget.trim() : `R$ ${valorTotalTarget.trim()}`) : 'R$ 600,00');
+
+  const hasExtraServices = quote.precisaDesmontagem || quote.precisaEmbalagem || (quote.precisaCaixas && (quote.quantidadeCaixas || 0) > 0);
+  let blocoValores = '';
+
+  if (hasExtraServices) {
+    blocoValores += `💰 **Detalhamento dos Valores:**\n`;
+    const transporteEfetivo = numTransporte > 0
+      ? numTransporte
+      : (totalCalculado > (numDesmontagem + numEmbalagem + numCaixas) ? (totalCalculado - numDesmontagem - numEmbalagem - numCaixas) : 0);
+
+    if (transporteEfetivo > 0) {
+      blocoValores += `• Transporte e carregamento: R$ ${transporteEfetivo.toFixed(2).replace('.', ',')}\n`;
+    } else {
+      blocoValores += `• Transporte e carregamento: Incluso\n`;
+    }
+
+    if (quote.precisaDesmontagem) {
+      const qtd = quote.itensDesmontagem?.length ? ` (${quote.itensDesmontagem.length} itens)` : '';
+      const v = numDesmontagem > 0 ? `R$ ${numDesmontagem.toFixed(2).replace('.', ',')}` : 'A combinar';
+      blocoValores += `• Desmontagem e montagem de móveis${qtd}: ${v}\n`;
+    }
+
+    if (quote.precisaEmbalagem) {
+      const qtd = quote.itensEmbalagem?.length ? ` (${quote.itensEmbalagem.length} itens)` : '';
+      const v = numEmbalagem > 0 ? `R$ ${numEmbalagem.toFixed(2).replace('.', ',')}` : 'A combinar';
+      blocoValores += `• Serviço de embalagem dos móveis${qtd}: ${v}\n`;
+    }
+
+    if (quote.precisaCaixas && (quote.quantidadeCaixas || 0) > 0) {
+      blocoValores += `• Caixas de papelão (${quote.quantidadeCaixas} un x R$ 3,00): R$ ${numCaixas.toFixed(2).replace('.', ',')}\n`;
+    }
+
+    blocoValores += `\n💰 **Valor total da mudança: ${valorTotalFormatado}**\n\n`;
+  } else {
+    blocoValores = `💰 **Valor total da mudança: ${valorTotalFormatado}**\n\n`;
+  }
+
+  let msg = `📦 **ORÇAMENTO DE MUDANÇA – ANDERSON MUDANÇAS E TRANSPORTE 🚛**\n\n`;
+  msg += `Olá, ${primeiroNome}! Tudo bem?\n\n`;
+  msg += `Conforme as informações enviadas, segue o orçamento detalhado para a sua mudança:\n\n`;
+
+  msg += `📍 **Origem:**\n${origemDesc}\n${origemDetalhes}\n\n`;
+  msg += `📍 **Destino:**\n${destinoDesc}\n${destinoDetalhes}\n\n`;
+
+  msg += `📅 **Data solicitada:** ${dataMudancaFormatada}\n`;
+  if (dataDisponivelFormatada) {
+    msg += `📅 **Data disponível:** ${dataDisponivelFormatada}\n`;
+  }
+  msg += `\n`;
+
+  msg += `📦 **Itens a transportar:**\n\n`;
+  msg += `${itensFormatados}\n\n`;
+
+  msg += `🚚 **Serviços inclusos no valor:**\n`;
+  msg += `${servicos.join('\n')}\n\n`;
+
+  msg += blocoValores;
+
+  msg += `💳 **Forma de pagamento:** ${formaPagamentoTarget || 'Pix.'}\n`;
+  msg += `📝 **${condicaoTarget || 'Pagamento no término da mudança.'}**\n\n`;
+
+  msg += `${primeiroNome}, agradeço pela oportunidade e pela confiança! Qualquer dúvida ou para confirmar a data, fico à disposição.\n\n`;
+  msg += `**Anderson Mudanças e Transporte**\n\n`;
+  msg += `*Segurança e compromisso do início ao fim! 🚛✨*`;
+
+  return msg;
+}
+
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   isAdmin,
   onLoginSuccess,
@@ -95,8 +328,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   // Edit fields for selected quote
   const [editStatus, setEditStatus] = useState<QuoteStatus>('novo');
   const [editValorOrcamento, setEditValorOrcamento] = useState<string>('');
+  const [editValorTransporte, setEditValorTransporte] = useState<string>('');
+  const [editValorDesmontagem, setEditValorDesmontagem] = useState<string>('');
+  const [editValorEmbalagem, setEditValorEmbalagem] = useState<string>('');
   const [editNotasInternas, setEditNotasInternas] = useState<string>('');
   const [editDataMudanca, setEditDataMudanca] = useState<string>('');
+  const [editDataDisponivel, setEditDataDisponivel] = useState<string>('');
+  const [editFormaPagamento, setEditFormaPagamento] = useState<string>('Pix.');
+  const [editCondicaoPagamento, setEditCondicaoPagamento] = useState<string>('Pagamento no término da mudança.');
+  const [customProposalText, setCustomProposalText] = useState<string>('');
+  const [copiedProposal, setCopiedProposal] = useState(false);
   const [saveSuccessMessage, setSaveSuccessMessage] = useState<string | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
@@ -148,13 +389,177 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const handleOpenDetail = (quote: Quote) => {
     setSelectedQuote(quote);
     setEditStatus(quote.status);
-    setEditValorOrcamento(quote.valorOrcamento ? String(quote.valorOrcamento) : '');
     setEditNotasInternas(quote.notasInternas || '');
     setEditDataMudanca(quote.dataMudanca || '');
+
+    const initialValorTransporte = quote.valorTransporte
+      ? quote.valorTransporte.toFixed(2).replace('.', ',')
+      : quote.valorOrcamento && !quote.precisaDesmontagem && !quote.precisaEmbalagem && !quote.precisaCaixas
+      ? quote.valorOrcamento.toFixed(2).replace('.', ',')
+      : '';
+    const initialValorDesmontagem = quote.valorDesmontagem
+      ? quote.valorDesmontagem.toFixed(2).replace('.', ',')
+      : '';
+    const initialValorEmbalagem = quote.valorEmbalagem
+      ? quote.valorEmbalagem.toFixed(2).replace('.', ',')
+      : '';
+
+    setEditValorTransporte(initialValorTransporte);
+    setEditValorDesmontagem(initialValorDesmontagem);
+    setEditValorEmbalagem(initialValorEmbalagem);
+
+    const initialDataDisp = quote.dataDisponivel || quote.dataMudanca || '';
+    setEditDataDisponivel(initialDataDisp);
+    const initialForma = quote.formaPagamento || 'Pix.';
+    setEditFormaPagamento(initialForma);
+    const initialCondicao = 'Pagamento no término da mudança.';
+    setEditCondicaoPagamento(initialCondicao);
+
+    // Initial total
+    let initialTotalStr = quote.valorOrcamento ? quote.valorOrcamento.toFixed(2).replace('.', ',') : '';
+    if (!initialTotalStr) {
+      const numT = parseCurrency(initialValorTransporte);
+      const numD = quote.precisaDesmontagem ? parseCurrency(initialValorDesmontagem) : 0;
+      const numE = quote.precisaEmbalagem ? parseCurrency(initialValorEmbalagem) : 0;
+      const numC = (quote.precisaCaixas && quote.quantidadeCaixas) ? quote.quantidadeCaixas * 3 : 0;
+      const sum = numT + numD + numE + numC;
+      if (sum > 0) initialTotalStr = sum.toFixed(2).replace('.', ',');
+    }
+    setEditValorOrcamento(initialTotalStr);
+
     setSaveSuccessMessage(null);
     setModalError(null);
     setIsConfirmingDelete(false);
     setLastScheduledCalendarUrl(null);
+    setCopiedProposal(false);
+
+    const generated = buildProposalMessage(
+      quote,
+      quote.dataMudanca || '',
+      initialDataDisp,
+      initialTotalStr,
+      initialValorTransporte,
+      initialValorDesmontagem,
+      initialValorEmbalagem,
+      initialForma,
+      initialCondicao
+    );
+    setCustomProposalText(generated);
+  };
+
+  // Helper to recompute proposal text with specific parameters
+  const updateProposalPreview = (
+    quote: Quote,
+    dataMudanca: string,
+    dataDisponivel: string,
+    total: string,
+    transporte: string,
+    desmontagem: string,
+    embalagem: string,
+    forma: string,
+    condicao: string
+  ) => {
+    const msg = buildProposalMessage(
+      quote,
+      dataMudanca,
+      dataDisponivel,
+      total,
+      transporte,
+      desmontagem,
+      embalagem,
+      forma,
+      condicao
+    );
+    setCustomProposalText(msg);
+  };
+
+  // Computes the automatic sum of all services + boxes
+  const calculateAutoSum = (
+    transporteVal: string,
+    desmontagemVal: string,
+    embalagemVal: string,
+    quote: Quote
+  ): number => {
+    const t = parseCurrency(transporteVal);
+    const d = quote.precisaDesmontagem ? parseCurrency(desmontagemVal) : 0;
+    const e = quote.precisaEmbalagem ? parseCurrency(embalagemVal) : 0;
+    const c = (quote.precisaCaixas && (quote.quantidadeCaixas || 0) > 0)
+      ? (quote.quantidadeCaixas || 0) * 3
+      : 0;
+    return t + d + e + c;
+  };
+
+  const handleTransporteChange = (val: string) => {
+    setEditValorTransporte(val);
+    if (!selectedQuote) return;
+    const autoSum = calculateAutoSum(val, editValorDesmontagem, editValorEmbalagem, selectedQuote);
+    const newTotal = autoSum > 0 ? autoSum.toFixed(2).replace('.', ',') : editValorOrcamento;
+    setEditValorOrcamento(newTotal);
+    updateProposalPreview(
+      selectedQuote,
+      editDataMudanca,
+      editDataDisponivel,
+      newTotal,
+      val,
+      editValorDesmontagem,
+      editValorEmbalagem,
+      editFormaPagamento,
+      editCondicaoPagamento
+    );
+  };
+
+  const handleDesmontagemChange = (val: string) => {
+    setEditValorDesmontagem(val);
+    if (!selectedQuote) return;
+    const autoSum = calculateAutoSum(editValorTransporte, val, editValorEmbalagem, selectedQuote);
+    const newTotal = autoSum > 0 ? autoSum.toFixed(2).replace('.', ',') : editValorOrcamento;
+    setEditValorOrcamento(newTotal);
+    updateProposalPreview(
+      selectedQuote,
+      editDataMudanca,
+      editDataDisponivel,
+      newTotal,
+      editValorTransporte,
+      val,
+      editValorEmbalagem,
+      editFormaPagamento,
+      editCondicaoPagamento
+    );
+  };
+
+  const handleEmbalagemChange = (val: string) => {
+    setEditValorEmbalagem(val);
+    if (!selectedQuote) return;
+    const autoSum = calculateAutoSum(editValorTransporte, editValorDesmontagem, val, selectedQuote);
+    const newTotal = autoSum > 0 ? autoSum.toFixed(2).replace('.', ',') : editValorOrcamento;
+    setEditValorOrcamento(newTotal);
+    updateProposalPreview(
+      selectedQuote,
+      editDataMudanca,
+      editDataDisponivel,
+      newTotal,
+      editValorTransporte,
+      editValorDesmontagem,
+      val,
+      editFormaPagamento,
+      editCondicaoPagamento
+    );
+  };
+
+  const handleTotalChange = (val: string) => {
+    setEditValorOrcamento(val);
+    if (!selectedQuote) return;
+    updateProposalPreview(
+      selectedQuote,
+      editDataMudanca,
+      editDataDisponivel,
+      val,
+      editValorTransporte,
+      editValorDesmontagem,
+      editValorEmbalagem,
+      editFormaPagamento,
+      editCondicaoPagamento
+    );
   };
 
   // Google Calendar URL generator
@@ -185,7 +590,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     details += `📄 Orçamento: ${quote.protocol}\n`;
     details += `👤 Cliente: ${quote.nome}\n`;
     if (quote.telefone) details += `📱 WhatsApp/Tel: ${quote.telefone}\n`;
-    if (rawDate) details += `📅 Data da Mudança: ${formatDateBR(rawDate)}\n`;
+    if (rawDate) details += `📅 Data Solicitada: ${formatDateBR(rawDate)}\n`;
     details += `\n📍 Origem: ${quote.origem} (${quote.tipoOrigem}${quote.detalhesOrigem ? ' - ' + quote.detalhesOrigem : ''})\n`;
     details += `📍 Destino: ${quote.destino} (${quote.tipoDestino}${quote.detalhesDestino ? ' - ' + quote.detalhesDestino : ''})\n`;
 
@@ -251,12 +656,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const newDate = editDataMudanca.trim() || selectedQuote.dataMudanca;
 
     try {
-      const numValor = parseFloat(editValorOrcamento.replace(',', '.'));
+      const numValorTotal = parseCurrency(editValorOrcamento);
+      const numValorTransporte = parseCurrency(editValorTransporte);
+      const numValorDesmontagem = parseCurrency(editValorDesmontagem);
+      const numValorEmbalagem = parseCurrency(editValorEmbalagem);
+      const numValorCaixas = (selectedQuote.precisaCaixas && selectedQuote.quantidadeCaixas)
+        ? selectedQuote.quantidadeCaixas * 3
+        : 0;
+
       await updateQuote(selectedQuote.id, {
         status: editStatus,
-        valorOrcamento: isNaN(numValor) ? undefined : numValor,
+        valorOrcamento: numValorTotal || undefined,
+        valorTransporte: numValorTransporte || undefined,
+        valorDesmontagem: selectedQuote.precisaDesmontagem ? (numValorDesmontagem || undefined) : undefined,
+        valorEmbalagem: selectedQuote.precisaEmbalagem ? (numValorEmbalagem || undefined) : undefined,
+        valorTotalCaixas: numValorCaixas || undefined,
         notasInternas: editNotasInternas.trim(),
         dataMudanca: newDate,
+        dataDisponivel: editDataDisponivel.trim() || newDate,
+        formaPagamento: editFormaPagamento.trim(),
       });
 
       setSaveSuccessMessage('Alterações salvas com sucesso!');
@@ -291,7 +709,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     }
   };
 
-  // Generate WhatsApp proposal text
+  // Generate WhatsApp proposal text based on the official model
   const handleSendWhatsAppProposal = (quote: Quote) => {
     if (!quote.telefone) {
       setModalError('Este cliente não cadastrou telefone de contato.');
@@ -301,33 +719,50 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const cleanPhone = quote.telefone.replace(/\D/g, '');
     const phoneWithCountry = cleanPhone.startsWith('55') ? cleanPhone : `55${cleanPhone}`;
 
-    const valorFormatado = editValorOrcamento
-      ? `R$ ${parseFloat(editValorOrcamento.replace(',', '.')).toFixed(2).replace('.', ',')}`
-      : 'sob consulta';
-
-    const targetDate = editDataMudanca.trim() || quote.dataMudanca;
-
-    let msg = `Olá, *${quote.nome.trim()}*! Tudo bem?\n`;
-    msg += `Aqui é o *Anderson* da *Anderson Mudanças e Transporte* 🚚\n\n`;
-    msg += `Recebemos sua solicitação (Orçamento: *${quote.protocol}*) para a data de *${formatDateBR(targetDate)}*.\n\n`;
-    msg += `📍 *Origem:* ${quote.origem}\n`;
-    msg += `📍 *Destino:* ${quote.destino}\n`;
-
-    if (quote.precisaDesmontagem) {
-      msg += `🛠️ *Desmontagem e montagem inclusa* (${quote.itensDesmontagem?.length || 0} itens)\n`;
-    }
-    if (quote.precisaEmbalagem) {
-      msg += `📦 *Serviço de embalagem incluso* (${quote.itensEmbalagem?.length || 0} itens)\n`;
-    }
-    if (quote.precisaCaixas && quote.quantidadeCaixas) {
-      msg += `📦 *Caixas de papelão:* ${quote.quantidadeCaixas} unidades inclusas\n`;
-    }
-
-    msg += `\n💰 *Valor Proposto do Orçamento:* *${valorFormatado}*\n\n`;
-    msg += `Podemos confirmar a disponibilidade para essa data? Fico à disposição para tirar qualquer dúvida!`;
+    const msg = customProposalText.trim()
+      ? customProposalText.trim()
+      : buildProposalMessage(
+          quote,
+          editDataMudanca,
+          editDataDisponivel,
+          editValorOrcamento,
+          editValorTransporte,
+          editValorDesmontagem,
+          editValorEmbalagem,
+          editFormaPagamento,
+          editCondicaoPagamento
+        );
 
     const url = `https://wa.me/${phoneWithCountry}?text=${encodeURIComponent(msg)}`;
-    window.open(url, '_blank');
+    try {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+      console.warn('Popup blocked:', e);
+    }
+  };
+
+  // Copy proposal text to clipboard
+  const handleCopyProposal = (quote: Quote) => {
+    const msg = customProposalText.trim()
+      ? customProposalText.trim()
+      : buildProposalMessage(
+          quote,
+          editDataMudanca,
+          editDataDisponivel,
+          editValorOrcamento,
+          editValorTransporte,
+          editValorDesmontagem,
+          editValorEmbalagem,
+          editFormaPagamento,
+          editCondicaoPagamento
+        );
+
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(msg).then(() => {
+        setCopiedProposal(true);
+        setTimeout(() => setCopiedProposal(false), 3000);
+      });
+    }
   };
 
   // Filtered Quotes
@@ -900,7 +1335,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between text-xs sm:text-sm">
               <span className="text-slate-700 flex items-center gap-1.5 font-medium">
                 <Calendar className="w-4 h-4 text-sky-600" />
-                Data Registrada da Mudança: <strong className="text-slate-900">{formatDateBR(editDataMudanca || selectedQuote.dataMudanca)}</strong>
+                Data Solicitada da Mudança: <strong className="text-slate-900">{formatDateBR(editDataMudanca || selectedQuote.dataMudanca)}</strong>
               </span>
               <span className="text-xs text-sky-700 font-semibold bg-sky-50 px-2.5 py-1 rounded-md border border-sky-100">
                 Pode ser alterada no campo abaixo
@@ -1037,6 +1472,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 </div>
               )}
 
+              {/* Row 1: Status and Dates */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Status selector */}
                 <div>
@@ -1063,39 +1499,434 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 {/* Alterar Data da Mudança */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Alterar Data da Mudança (dia-mês-ano):
+                    Data Solicitada (dia-mês-ano):
                   </label>
                   <div className="flex flex-col gap-1.5">
                     <input
                       type="date"
                       value={editDataMudanca}
-                      onChange={(e) => setEditDataMudanca(e.target.value)}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditDataMudanca(val);
+                        if (selectedQuote) {
+                          updateProposalPreview(
+                            selectedQuote,
+                            val,
+                            editDataDisponivel || val,
+                            editValorOrcamento,
+                            editValorTransporte,
+                            editValorDesmontagem,
+                            editValorEmbalagem,
+                            editFormaPagamento,
+                            editCondicaoPagamento
+                          );
+                        }
+                      }}
                       className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500 cursor-pointer"
                     />
                     {editDataMudanca && (
                       <span className="text-[11px] font-bold text-sky-800 bg-sky-50 border border-sky-200 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 w-fit">
                         <Calendar className="w-3 h-3 text-sky-600" />
-                        {formatDateBR(editDataMudanca)} (dia/mês/ano)
+                        {formatDateBR(editDataMudanca)}
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* Quoted Price */}
+                {/* Data Disponível - CAMPO EXIGIDO */}
+                <div>
+                  <label className="block text-xs font-bold text-emerald-800 uppercase mb-1 flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                    Data Disponível (dia-mês-ano):
+                  </label>
+                  <div className="flex flex-col gap-1.5">
+                    <input
+                      type="date"
+                      value={editDataDisponivel}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setEditDataDisponivel(val);
+                        if (selectedQuote) {
+                          updateProposalPreview(
+                            selectedQuote,
+                            editDataMudanca,
+                            val,
+                            editValorOrcamento,
+                            editValorTransporte,
+                            editValorDesmontagem,
+                            editValorEmbalagem,
+                            editFormaPagamento,
+                            editCondicaoPagamento
+                          );
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-xl border-2 border-emerald-400 text-sm font-bold text-slate-900 bg-emerald-50/40 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    {editDataDisponivel && (
+                      <span className="text-[11px] font-bold text-emerald-800 bg-emerald-100/90 border border-emerald-300 px-2.5 py-1 rounded-lg inline-flex items-center gap-1 w-fit">
+                        <Check className="w-3 h-3 text-emerald-600" />
+                        Disponível: {formatDateBR(editDataDisponivel)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 2: Precificação de Serviços & Detalhamento */}
+              <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200 pb-3">
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+                      <DollarSign className="w-4 h-4 text-emerald-600" />
+                      Precificação dos Serviços & Detalhamento do Orçamento
+                    </h4>
+                    <p className="text-xs text-slate-500">
+                      Preencha os valores dos serviços solicitados. Caixas de papelão e a soma total são calculadas automaticamente.
+                    </p>
+                  </div>
+                  {/* Badge da soma calculada com botão de aplicação */}
+                  {selectedQuote && (
+                    <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-900 px-3 py-1.5 rounded-xl text-xs font-bold shrink-0">
+                      <span>Soma dos Itens: R$ {calculateAutoSum(editValorTransporte, editValorDesmontagem, editValorEmbalagem, selectedQuote).toFixed(2).replace('.', ',')}</span>
+                      {Math.abs(parseCurrency(editValorOrcamento) - calculateAutoSum(editValorTransporte, editValorDesmontagem, editValorEmbalagem, selectedQuote)) > 0.01 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const sum = calculateAutoSum(editValorTransporte, editValorDesmontagem, editValorEmbalagem, selectedQuote);
+                            const formatted = sum.toFixed(2).replace('.', ',');
+                            handleTotalChange(formatted);
+                          }}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors"
+                          title="Definir o valor total com a soma calculada dos itens"
+                        >
+                          Aplicar Soma
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {/* Campo 1: Transporte e Carregamento Base */}
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200 space-y-1.5 shadow-2xs">
+                    <label className="block text-xs font-bold text-slate-800 uppercase flex items-center gap-1.5">
+                      <Truck className="w-3.5 h-3.5 text-sky-600" />
+                      Transporte / Frete Base (R$):
+                    </label>
+                    <p className="text-[11px] text-slate-500">
+                      Transporte, equipe e proteção básica
+                    </p>
+                    <div className="relative pt-1">
+                      <span className="absolute left-3 top-3 text-xs font-bold text-slate-400">R$</span>
+                      <input
+                        type="text"
+                        value={editValorTransporte}
+                        onChange={(e) => handleTransporteChange(e.target.value)}
+                        placeholder="Ex: 500,00"
+                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Campo 2: Desmontagem e Montagem (Se solicitada) */}
+                  {selectedQuote.precisaDesmontagem ? (
+                    <div className="bg-sky-50/70 p-3.5 rounded-xl border-2 border-sky-300 space-y-1.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-sky-950 uppercase flex items-center gap-1.5">
+                          <Wrench className="w-3.5 h-3.5 text-sky-700" />
+                          Desmontagem / Montagem (R$):
+                        </label>
+                        <span className="bg-sky-200 text-sky-900 text-[10px] font-black px-2 py-0.5 rounded-full">
+                          SOLICITADO
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-sky-800">
+                        {selectedQuote.itensDesmontagem && selectedQuote.itensDesmontagem.length > 0
+                          ? `${selectedQuote.itensDesmontagem.length} móveis selecionados pelo cliente`
+                          : 'Cliente solicitou desmontagem e montagem'}
+                      </p>
+                      <div className="relative pt-1">
+                        <span className="absolute left-3 top-3 text-xs font-bold text-sky-700">R$</span>
+                        <input
+                          type="text"
+                          value={editValorDesmontagem}
+                          onChange={(e) => handleDesmontagemChange(e.target.value)}
+                          placeholder="Ex: 150,00"
+                          className="w-full pl-9 pr-3 py-2 rounded-xl border border-sky-300 text-sm font-bold text-sky-950 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                        />
+                      </div>
+                      {selectedQuote.itensDesmontagem && selectedQuote.itensDesmontagem.length > 0 && (
+                        <div className="pt-1">
+                          <span className="text-[10px] font-semibold text-sky-800 block">Itens:</span>
+                          <span className="text-[11px] text-sky-900 line-clamp-2">
+                            {selectedQuote.itensDesmontagem.join(', ')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-100/60 p-3.5 rounded-xl border border-dashed border-slate-300 space-y-1 text-slate-500 opacity-75">
+                      <span className="text-xs font-bold uppercase flex items-center gap-1.5 text-slate-600">
+                        <Wrench className="w-3.5 h-3.5 text-slate-400" />
+                        Desmontagem e Montagem:
+                      </span>
+                      <p className="text-xs text-slate-500">
+                        Cliente <strong className="text-slate-600">não solicitou</strong> serviço de desmontagem.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Campo 3: Serviço de Embalagem (Se solicitado) */}
+                  {selectedQuote.precisaEmbalagem ? (
+                    <div className="bg-amber-50/70 p-3.5 rounded-xl border-2 border-amber-300 space-y-1.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-amber-950 uppercase flex items-center gap-1.5">
+                          <Box className="w-3.5 h-3.5 text-amber-700" />
+                          Serviço de Embalagem (R$):
+                        </label>
+                        <span className="bg-amber-200 text-amber-900 text-[10px] font-black px-2 py-0.5 rounded-full">
+                          SOLICITADO
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-amber-800">
+                        {selectedQuote.itensEmbalagem && selectedQuote.itensEmbalagem.length > 0
+                          ? `${selectedQuote.itensEmbalagem.length} móveis selecionados para embalar`
+                          : 'Cliente solicitou serviço de embalagem'}
+                      </p>
+                      <div className="relative pt-1">
+                        <span className="absolute left-3 top-3 text-xs font-bold text-amber-700">R$</span>
+                        <input
+                          type="text"
+                          value={editValorEmbalagem}
+                          onChange={(e) => handleEmbalagemChange(e.target.value)}
+                          placeholder="Ex: 100,00"
+                          className="w-full pl-9 pr-3 py-2 rounded-xl border border-amber-300 text-sm font-bold text-amber-950 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500"
+                        />
+                      </div>
+                      {selectedQuote.itensEmbalagem && selectedQuote.itensEmbalagem.length > 0 && (
+                        <div className="pt-1">
+                          <span className="text-[10px] font-semibold text-amber-800 block">Itens:</span>
+                          <span className="text-[11px] text-amber-900 line-clamp-2">
+                            {selectedQuote.itensEmbalagem.join(', ')}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="bg-slate-100/60 p-3.5 rounded-xl border border-dashed border-slate-300 space-y-1 text-slate-500 opacity-75">
+                      <span className="text-xs font-bold uppercase flex items-center gap-1.5 text-slate-600">
+                        <Box className="w-3.5 h-3.5 text-slate-400" />
+                        Serviço de Embalagem:
+                      </span>
+                      <p className="text-xs text-slate-500">
+                        Cliente <strong className="text-slate-600">não solicitou</strong> serviço de embalagem especial.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Campo 4: Caixas de Papelão (Cálculo Automático) */}
+                  {selectedQuote.precisaCaixas && (selectedQuote.quantidadeCaixas || 0) > 0 ? (
+                    <div className="bg-emerald-50/70 p-3.5 rounded-xl border-2 border-emerald-300 space-y-1.5 shadow-2xs">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-bold text-emerald-950 uppercase flex items-center gap-1.5">
+                          <Package className="w-3.5 h-3.5 text-emerald-700" />
+                          Caixas de Papelão (Automático):
+                        </label>
+                        <span className="bg-emerald-200 text-emerald-900 text-[10px] font-black px-2 py-0.5 rounded-full">
+                          AUTO
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-emerald-800">
+                        {selectedQuote.quantidadeCaixas} unidades x R$ 3,00 cada
+                      </p>
+                      <div className="pt-1 flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-emerald-200">
+                        <span className="text-xs font-semibold text-slate-600">Subtotal Caixas:</span>
+                        <span className="text-base font-black text-emerald-700">
+                          R$ {((selectedQuote.quantidadeCaixas || 0) * 3).toFixed(2).replace('.', ',')}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-emerald-700 font-medium block">
+                        ✔ Calculado automaticamente e incluído no orçamento
+                      </span>
+                    </div>
+                  ) : null}
+
+                  {/* Campo 5: Valor Total da Mudança */}
+                  <div className="bg-slate-900 text-white p-3.5 rounded-xl border border-slate-800 space-y-1.5 shadow-sm col-span-1 md:col-span-2 lg:col-span-1">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-amber-400 uppercase flex items-center gap-1.5">
+                        <DollarSign className="w-3.5 h-3.5 text-amber-400" />
+                        Valor Total da Mudança (R$):
+                      </label>
+                      <span className="text-[10px] text-slate-300 font-semibold">
+                        Total Final
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300">
+                      Soma automática de serviços ou valor customizado
+                    </p>
+                    <div className="relative pt-1">
+                      <span className="absolute left-3 top-3 text-xs font-bold text-amber-400">R$</span>
+                      <input
+                        type="text"
+                        value={editValorOrcamento}
+                        onChange={(e) => handleTotalChange(e.target.value)}
+                        placeholder="Ex: 600,00"
+                        className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-700 text-base font-black text-white bg-slate-800 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Row 3: Forma e Condição de Pagamento */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Forma de Pagamento */}
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-                    Valor do Orçamento (R$):
+                    Forma de Pagamento:
                   </label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">R$</span>
-                    <input
-                      type="text"
-                      value={editValorOrcamento}
-                      onChange={(e) => setEditValorOrcamento(e.target.value)}
-                      placeholder="Ex: 850,00"
-                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-sm font-bold text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
-                    />
+                  <input
+                    type="text"
+                    value={editFormaPagamento}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditFormaPagamento(val);
+                      if (selectedQuote) {
+                        updateProposalPreview(
+                          selectedQuote,
+                          editDataMudanca,
+                          editDataDisponivel,
+                          editValorOrcamento,
+                          editValorTransporte,
+                          editValorDesmontagem,
+                          editValorEmbalagem,
+                          val,
+                          editCondicaoPagamento
+                        );
+                      }
+                    }}
+                    placeholder="Pix."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+
+                {/* Condição de Pagamento */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                    Condição de Pagamento:
+                  </label>
+                  <input
+                    type="text"
+                    value={editCondicaoPagamento}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setEditCondicaoPagamento(val);
+                      if (selectedQuote) {
+                        updateProposalPreview(
+                          selectedQuote,
+                          editDataMudanca,
+                          editDataDisponivel,
+                          editValorOrcamento,
+                          editValorTransporte,
+                          editValorDesmontagem,
+                          editValorEmbalagem,
+                          editFormaPagamento,
+                          val
+                        );
+                      }
+                    }}
+                    placeholder="Pagamento no término da mudança."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-sky-500"
+                  />
+                </div>
+              </div>
+
+              {/* Official WhatsApp Proposal Card */}
+              <div className="bg-emerald-50/70 border-2 border-emerald-300 rounded-2xl p-4 sm:p-5 space-y-3.5 shadow-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-extrabold text-emerald-950 flex items-center gap-2">
+                      <MessageCircle className="w-4 h-4 text-emerald-600" />
+                      📦 Modelo de Proposta de Orçamento (WhatsApp)
+                    </h4>
+                    <p className="text-xs text-emerald-800">
+                      Inclui data disponível, itens a transportar, serviços inclusos e valor total conforme o modelo oficial.
+                    </p>
                   </div>
+
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const fresh = buildProposalMessage(
+                          selectedQuote,
+                          editDataMudanca,
+                          editDataDisponivel,
+                          editValorOrcamento,
+                          editValorTransporte,
+                          editValorDesmontagem,
+                          editValorEmbalagem,
+                          editFormaPagamento,
+                          editCondicaoPagamento
+                        );
+                        setCustomProposalText(fresh);
+                      }}
+                      className="px-3 py-1.5 bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-bold text-xs rounded-xl transition-colors flex items-center gap-1.5 cursor-pointer"
+                      title="Recarregar proposta com os dados dos campos"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      Atualizar Texto
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleCopyProposal(selectedQuote)}
+                      className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-800 font-bold text-xs rounded-xl border border-emerald-300 transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
+                    >
+                      {copiedProposal ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          <span className="text-emerald-700">Copiado!</span>
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-3.5 h-3.5 text-slate-500" />
+                          Copiar Texto
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live editable preview */}
+                <div className="space-y-1">
+                  <label className="block text-[11px] font-bold text-emerald-900 uppercase">
+                    Texto que será enviado ao cliente no WhatsApp (editável):
+                  </label>
+                  <textarea
+                    rows={11}
+                    value={customProposalText}
+                    onChange={(e) => setCustomProposalText(e.target.value)}
+                    className="w-full p-3.5 rounded-xl border border-emerald-300 bg-white text-xs sm:text-sm font-sans text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-inner leading-relaxed whitespace-pre-wrap"
+                    placeholder="Carregando modelo da proposta..."
+                  />
+                </div>
+
+                <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
+                  <div className="text-[11px] text-emerald-800">
+                    💡 <em>Você pode editar o texto acima à vontade antes de enviar pelo WhatsApp.</em>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSendWhatsAppProposal(selectedQuote)}
+                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    Enviar Proposta pelo WhatsApp
+                    <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                  </button>
                 </div>
               </div>
 

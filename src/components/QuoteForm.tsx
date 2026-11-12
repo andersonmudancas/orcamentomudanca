@@ -121,7 +121,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
     }
     msg += `\n📍 *ORIGEM:*\n${origem.trim()}\nTipo: ${origemInfo}\n`;
     msg += `\n📍 *DESTINO:*\n${destino.trim()}\nTipo: ${destinoInfo}\n`;
-    msg += `\n📅 *Data da Mudança:* ${dataFormatada}\n`;
+    msg += `\n📅 *Data Solicitada:* ${dataFormatada}\n`;
     msg += `\n📦 *ITENS DA MUDANÇA:*\n${itens.trim()}\n`;
 
     // Desmontagem
@@ -625,7 +625,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
 
           <div>
             <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
-              Data da Mudança (dia-mês-ano) *
+              Data Solicitada (dia-mês-ano) *
             </label>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2.5">
               <input
@@ -662,7 +662,7 @@ export const QuoteForm: React.FC<QuoteFormProps> = ({ onSuccessCreated }) => {
               rows={4}
               value={itens}
               onChange={(e) => setItens(e.target.value)}
-              placeholder="Descreva os itens da sua mudança. Ex: 1 geladeira duplex, 1 fogão 4 bocas, 1 cama box casal com colchão, sofá 3 lugares, máquina de lavar 12kg, mesa com 4 cadeiras, cerca de 15 caixas..."
+              placeholder="Descreva os itens da sua mudança. Ex: 1 geladeira duplex, 1 fogão 4 bocas, 1 cama box casal com colchão, sofá 3 lugares, máquina de lavar 12kg, mesa com 4 cadeiras, estante..."
               className="w-full px-3.5 py-3 rounded-xl border border-slate-300 text-slate-800 text-sm focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500 bg-slate-50/50"
             />
           </div>

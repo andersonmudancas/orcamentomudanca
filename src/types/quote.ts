@@ -38,6 +38,11 @@ export interface Quote {
   observacoes?: string;
   status: QuoteStatus;
   valorOrcamento?: number;
+  valorTransporte?: number;
+  valorDesmontagem?: number;
+  valorEmbalagem?: number;
+  dataDisponivel?: string;
+  formaPagamento?: string;
   notasInternas?: string;
   createdAt: any;
   updatedAt?: any;
