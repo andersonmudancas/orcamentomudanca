@@ -105,6 +105,14 @@ export async function updateQuote(id: string, updates: Partial<Quote>): Promise<
   delete cleanUpdates.id;
   delete cleanUpdates.createdAt;
 
+  // Firestore updateDoc strictly forbids `undefined` values and NaN
+  Object.keys(cleanUpdates).forEach((key) => {
+    const val = cleanUpdates[key];
+    if (val === undefined || (typeof val === 'number' && isNaN(val))) {
+      delete cleanUpdates[key];
+    }
+  });
+
   try {
     await updateDoc(docRef, cleanUpdates);
   } catch (error) {

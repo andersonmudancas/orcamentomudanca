@@ -562,15 +562,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   };
 
-  // Google Calendar URL generator
+  // Google Calendar URL generator - Uses Data Disponível for the event date
   const getGoogleCalendarUrl = (
     quote: Quote,
-    targetDate: string,
+    targetDate?: string,
     targetValor?: string,
     targetNotas?: string
   ): string => {
     const title = `🚚 Mudança - ${quote.nome} (Orçamento: ${quote.protocol})`;
-    const rawDate = (targetDate || quote.dataMudanca || '').trim();
+    // Prioritize targetDate, then confirmed dataDisponivel, then dataMudanca
+    const rawDate = (targetDate || quote.dataDisponivel || quote.dataMudanca || '').trim();
     let datesParam = '';
     if (rawDate) {
       if (/^\d{4}-\d{2}-\d{2}$/.test(rawDate)) {
@@ -590,7 +591,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     details += `📄 Orçamento: ${quote.protocol}\n`;
     details += `👤 Cliente: ${quote.nome}\n`;
     if (quote.telefone) details += `📱 WhatsApp/Tel: ${quote.telefone}\n`;
-    if (rawDate) details += `📅 Data Solicitada: ${formatDateBR(rawDate)}\n`;
+    if (rawDate) details += `📅 Data Disponível / Agendada: ${formatDateBR(rawDate)}\n`;
+    if (quote.dataMudanca && quote.dataMudanca !== rawDate) {
+      details += `📅 Data Solicitada Originalmente: ${formatDateBR(quote.dataMudanca)}\n`;
+    }
     details += `\n📍 Origem: ${quote.origem} (${quote.tipoOrigem}${quote.detalhesOrigem ? ' - ' + quote.detalhesOrigem : ''})\n`;
     details += `📍 Destino: ${quote.destino} (${quote.tipoDestino}${quote.detalhesDestino ? ' - ' + quote.detalhesDestino : ''})\n`;
 
@@ -631,11 +635,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const handleOpenGoogleCalendar = (
     quote: Quote,
-    targetDate: string,
+    targetDate?: string,
     targetValor?: string,
     targetNotas?: string
   ) => {
-    const url = getGoogleCalendarUrl(quote, targetDate, targetValor, targetNotas);
+    const calendarDate = targetDate || quote.dataDisponivel || quote.dataMudanca;
+    const url = getGoogleCalendarUrl(quote, calendarDate, targetValor, targetNotas);
     try {
       window.open(url, '_blank', 'noopener,noreferrer');
     } catch (e) {
@@ -654,6 +659,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     const isNowFechado = editStatus === 'fechado';
     const statusJustChangedToFechado = isNowFechado && oldStatus !== 'fechado';
     const newDate = editDataMudanca.trim() || selectedQuote.dataMudanca;
+    const newDateDisponivel = editDataDisponivel.trim() || selectedQuote.dataDisponivel || newDate;
 
     try {
       const numValorTotal = parseCurrency(editValorOrcamento);
@@ -664,34 +670,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         ? selectedQuote.quantidadeCaixas * 3
         : 0;
 
-      await updateQuote(selectedQuote.id, {
+      const payload: Partial<Quote> = {
         status: editStatus,
-        valorOrcamento: numValorTotal || undefined,
-        valorTransporte: numValorTransporte || undefined,
-        valorDesmontagem: selectedQuote.precisaDesmontagem ? (numValorDesmontagem || undefined) : undefined,
-        valorEmbalagem: selectedQuote.precisaEmbalagem ? (numValorEmbalagem || undefined) : undefined,
-        valorTotalCaixas: numValorCaixas || undefined,
         notasInternas: editNotasInternas.trim(),
         dataMudanca: newDate,
-        dataDisponivel: editDataDisponivel.trim() || newDate,
+        dataDisponivel: newDateDisponivel,
         formaPagamento: editFormaPagamento.trim(),
-      });
+      };
+
+      if (numValorTotal > 0) payload.valorOrcamento = numValorTotal;
+      if (numValorTransporte > 0) payload.valorTransporte = numValorTransporte;
+      if (selectedQuote.precisaDesmontagem && numValorDesmontagem > 0) {
+        payload.valorDesmontagem = numValorDesmontagem;
+      }
+      if (selectedQuote.precisaEmbalagem && numValorEmbalagem > 0) {
+        payload.valorEmbalagem = numValorEmbalagem;
+      }
+      if (numValorCaixas > 0) {
+        payload.valorTotalCaixas = numValorCaixas;
+      }
+
+      await updateQuote(selectedQuote.id, payload);
 
       setSaveSuccessMessage('Alterações salvas com sucesso!');
 
-      // Se o status for ou se tornou Fechado / Agendado, atualiza o link direto do Google Agenda
+      // Se o status for ou se tornou Fechado / Agendado, atualiza o link direto do Google Agenda com a DATA DISPONÍVEL
       if (isNowFechado) {
-        const calUrl = getGoogleCalendarUrl(selectedQuote, newDate, editValorOrcamento, editNotasInternas);
+        const calUrl = getGoogleCalendarUrl(selectedQuote, newDateDisponivel, editValorOrcamento, editNotasInternas);
         setLastScheduledCalendarUrl(calUrl);
         if (statusJustChangedToFechado) {
-          handleOpenGoogleCalendar(selectedQuote, newDate, editValorOrcamento, editNotasInternas);
+          handleOpenGoogleCalendar(selectedQuote, newDateDisponivel, editValorOrcamento, editNotasInternas);
         }
       }
 
       setTimeout(() => setSaveSuccessMessage(null), 5000);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao atualizar pedido:', error);
-      setModalError('Erro ao salvar alterações no banco de dados. Verifique a conexão.');
+      let errMsg = 'Erro ao salvar alterações no banco de dados.';
+      if (error instanceof Error) {
+        try {
+          const parsed = JSON.parse(error.message);
+          if (parsed && parsed.error) {
+            errMsg += ` Detalhes: ${parsed.error}`;
+          }
+        } catch {
+          if (error.message) {
+            errMsg += ` Detalhes: ${error.message}`;
+          }
+        }
+      }
+      setModalError(errMsg);
     } finally {
       setIsSaving(false);
     }
@@ -1135,7 +1163,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleOpenGoogleCalendar(q, q.dataMudanca);
+                          handleOpenGoogleCalendar(q, q.dataDisponivel || q.dataMudanca);
                         }}
                         className="p-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl transition-colors border border-emerald-200 cursor-pointer"
                         title="Agendar diretamente na Google Agenda"
@@ -1220,13 +1248,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 onClick={() =>
                   handleOpenGoogleCalendar(
                     selectedQuote,
-                    editDataMudanca,
+                    editDataDisponivel.trim() || selectedQuote.dataDisponivel || editDataMudanca,
                     editValorOrcamento,
                     editNotasInternas
                   )
                 }
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-                title="Agendar diretamente no Google Calendar"
+                title="Agendar diretamente no Google Calendar na data disponível"
               >
                 <Calendar className="w-4 h-4" />
                 Agendar no Google Agenda
@@ -1273,7 +1301,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     Status Fechado / Agendado
                   </span>
                   <p className="text-xs text-emerald-700">
-                    Mudança agendada para <strong>{formatDateBR(editDataMudanca || selectedQuote.dataMudanca)}</strong>. Ao salvar alterações, o agendamento no Google Agenda abrirá automaticamente.
+                    Mudança agendada para a <strong>Data Disponível: {formatDateBR(editDataDisponivel.trim() || selectedQuote.dataDisponivel || editDataMudanca || selectedQuote.dataMudanca)}</strong>. Ao salvar alterações, o agendamento no Google Agenda abrirá automaticamente.
                   </p>
                 </div>
                 <button
@@ -1281,7 +1309,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   onClick={() =>
                     handleOpenGoogleCalendar(
                       selectedQuote,
-                      editDataMudanca,
+                      editDataDisponivel.trim() || selectedQuote.dataDisponivel || editDataMudanca,
                       editValorOrcamento,
                       editNotasInternas
                     )
@@ -1985,7 +2013,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                   <a
                     href={getGoogleCalendarUrl(
                       selectedQuote,
-                      editDataMudanca,
+                      editDataDisponivel.trim() || selectedQuote.dataDisponivel || editDataMudanca,
                       editValorOrcamento,
                       editNotasInternas
                     )}

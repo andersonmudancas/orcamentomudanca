@@ -115,6 +115,28 @@
           "type": "number",
           "description": "Quoted price provided by the admin in BRL"
         },
+        "valorTransporte": {
+          "type": "number",
+          "description": "Base transportation and loading price in BRL"
+        },
+        "valorDesmontagem": {
+          "type": "number",
+          "description": "Furniture disassembly and assembly service price in BRL"
+        },
+        "valorEmbalagem": {
+          "type": "number",
+          "description": "Packing service price in BRL"
+        },
+        "dataDisponivel": {
+          "type": "string",
+          "description": "Confirmed available moving date in YYYY-MM-DD or DD/MM/YYYY format",
+          "maxLength": 20
+        },
+        "formaPagamento": {
+          "type": "string",
+          "description": "Payment method agreed (e.g. Pix)",
+          "maxLength": 100
+        },
         "notasInternas": {
           "type": "string",
           "description": "Private admin notes and logistics details",

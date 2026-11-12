@@ -48,6 +48,11 @@ service cloud.firestore {
         (!('valorTotalCaixas' in data) || (data.valorTotalCaixas is number && data.valorTotalCaixas >= 0)) &&
         (!('observacoes' in data) || (data.observacoes is string && data.observacoes.size() <= 1000)) &&
         (!('valorOrcamento' in data) || (data.valorOrcamento is number && data.valorOrcamento >= 0)) &&
+        (!('valorTransporte' in data) || (data.valorTransporte is number && data.valorTransporte >= 0)) &&
+        (!('valorDesmontagem' in data) || (data.valorDesmontagem is number && data.valorDesmontagem >= 0)) &&
+        (!('valorEmbalagem' in data) || (data.valorEmbalagem is number && data.valorEmbalagem >= 0)) &&
+        (!('dataDisponivel' in data) || (data.dataDisponivel is string && data.dataDisponivel.size() <= 20)) &&
+        (!('formaPagamento' in data) || (data.formaPagamento is string && data.formaPagamento.size() <= 100)) &&
         (!('notasInternas' in data) || (data.notasInternas is string && data.notasInternas.size() <= 2000));
     }
 
@@ -61,8 +66,8 @@ service cloud.firestore {
 
       allow update: if isValidId(quoteId) &&
         isValidQuote(incoming()) &&
-        incoming().createdAt == existing().createdAt &&
-        incoming().updatedAt == request.time;
+        (!('createdAt' in existing()) || incoming().createdAt == existing().createdAt) &&
+        (!('updatedAt' in incoming()) || incoming().updatedAt == request.time);
 
       allow delete: if isValidId(quoteId);
     }
