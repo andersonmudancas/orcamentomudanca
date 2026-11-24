@@ -27,10 +27,13 @@ import {
   Check,
   DollarSign,
   Clock,
+  FileText,
 } from 'lucide-react';
 import { Quote, QuoteStatus } from '../types/quote';
 import { subscribeQuotes, updateQuote, deleteQuote } from '../services/quotesService';
 import { formatDateBR } from '../utils/dateUtils';
+import { ProposalPdfModal } from './ProposalPdfModal';
+import { downloadProposalPdf } from '../utils/pdfProposalGenerator';
 
 interface AdminDashboardProps {
   isAdmin: boolean;
@@ -347,6 +350,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const [modalError, setModalError] = useState<string | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [lastScheduledCalendarUrl, setLastScheduledCalendarUrl] = useState<string | null>(null);
+  const [showPdfPreview, setShowPdfPreview] = useState(false);
 
   // Real-time listener when authenticated as admin
   useEffect(() => {
@@ -439,6 +443,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     setIsConfirmingDelete(false);
     setLastScheduledCalendarUrl(null);
     setCopiedProposal(false);
+    setShowPdfPreview(false);
 
     const generated = buildProposalMessage(
       quote,
@@ -1231,6 +1236,19 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {/* Direct PDF quick button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadProposalPdf({ quote: q });
+                        }}
+                        className="p-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl transition-colors border border-blue-200 cursor-pointer"
+                        title="Baixar proposta em PDF"
+                      >
+                        <FileText className="w-4 h-4" />
+                      </button>
+
                       {/* Direct Google Calendar quick button */}
                       <button
                         type="button"
@@ -1332,6 +1350,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               >
                 <Calendar className="w-4 h-4" />
                 Agendar no Google Agenda
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowPdfPreview(true)}
+                className="px-3.5 py-2 bg-blue-900 hover:bg-blue-950 text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                title="Visualizar e enviar proposta em PDF para o cliente"
+              >
+                <FileText className="w-4 h-4" />
+                Proposta em PDF
               </button>
 
               {selectedQuote.telefone && (
@@ -2066,18 +2094,29 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
                 <div className="flex items-center justify-between gap-3 flex-wrap pt-1">
                   <div className="text-[11px] text-emerald-800">
-                    💡 <em>Você pode editar o texto acima à vontade antes de enviar pelo WhatsApp.</em>
+                    💡 <em>Você pode editar o texto acima à vontade antes de enviar ou gerar o PDF oficial.</em>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleSendWhatsAppProposal(selectedQuote)}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
-                  >
-                    <MessageCircle className="w-4 h-4" />
-                    Enviar Proposta pelo WhatsApp
-                    <ExternalLink className="w-3.5 h-3.5 opacity-80" />
-                  </button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setShowPdfPreview(true)}
+                      className="px-4 py-2.5 bg-blue-900 hover:bg-blue-950 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Enviar / Baixar PDF
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleSendWhatsAppProposal(selectedQuote)}
+                      className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      Enviar Proposta pelo WhatsApp
+                      <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -2167,6 +2206,32 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
           </div>
         </div>
+      )}
+
+      {/* PDF PROPOSAL PREVIEW & EXPORT MODAL */}
+      {selectedQuote && (
+        <ProposalPdfModal
+          isOpen={showPdfPreview}
+          onClose={() => setShowPdfPreview(false)}
+          proposalInput={{
+            quote: selectedQuote,
+            dataMudancaTarget: editDataMudanca,
+            dataDisponivelTarget: editDataDisponivel,
+            horarioDisponivelTarget: editHorarioDisponivel,
+            valorTotalTarget: editValorOrcamento,
+            valorTransporteTarget: editValorTransporte,
+            valorDesmontagemTarget: editValorDesmontagem,
+            valorEmbalagemTarget: editValorEmbalagem,
+            formaPagamentoTarget: editFormaPagamento,
+            condicaoTarget: editCondicaoPagamento,
+          }}
+          onStatusSent={() => {
+            if (selectedQuote.id && (editStatus === 'novo' || editStatus === 'em_analise')) {
+              setEditStatus('orcamento_enviado');
+              updateQuote(selectedQuote.id, { status: 'orcamento_enviado' }).catch(console.error);
+            }
+          }}
+        />
       )}
 
     </div>
